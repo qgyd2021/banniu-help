@@ -1,0 +1,16 @@
+python-dotenv
+requests
+httpx[http2]
+qrcode
+tenacity
+xhshow
+tzdata
+openai
+aiofiles
+fastapi
+uvicorn
+jinja2
+fastapi
+starlette
+gradio
+cacheout

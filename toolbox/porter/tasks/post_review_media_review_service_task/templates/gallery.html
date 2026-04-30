@@ -1,0 +1,692 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Banniu Meta 图片浏览</title>
+  <style>
+    body { font-family: -apple-system, Segoe UI, PingFang SC, sans-serif; margin: 0; background: #f7f8fa; color: #222; }
+    .wrap { max-width: 1600px; margin: 0 auto; padding: 20px; }
+    h1 { margin: 0 0 8px; font-size: 24px; }
+    .sub { margin: 0 0 16px; color: #666; font-size: 14px; }
+    .rows { display: flex; flex-direction: column; gap: 12px; }
+    .row { background: #fff; border-radius: 12px; box-shadow: 0 1px 4px rgba(0,0,0,.08); display: grid; grid-template-columns: 1fr 320px; overflow: hidden; }
+    .row.removing {
+      opacity: 0;
+      transform: translateY(-8px) scale(.985);
+      max-height: 0;
+      margin: 0;
+      padding: 0;
+      border: 0;
+      transition: opacity .2s ease, transform .22s ease, max-height .28s ease, margin .28s ease, padding .28s ease;
+    }
+    .meta { order: 2; padding: 12px; border-left: 1px solid #eee; font-size: 13px; line-height: 1.6; }
+    .meta b { color: #111; }
+    .meta .title { margin-top: 6px; color: #333; word-break: break-word; }
+    .meta .link { margin-top: 8px; font-size: 12px; color: #666; word-break: break-all; }
+    .submit-row-btn {
+      margin-top: 10px;
+      width: 100%;
+      height: 34px;
+      border: 1px solid #d9d9d9;
+      border-radius: 8px;
+      background: #fff;
+      color: #333;
+      font-size: 13px;
+      cursor: pointer;
+    }
+    .submit-row-btn:hover { background: #f5f5f5; }
+    .submit-row-btn.armed {
+      border-color: #1677ff;
+      background: #1677ff;
+      color: #fff;
+    }
+    .submit-row-btn.armed:hover { background: #0958d9; }
+    .submit-row-btn:disabled { background: #8fb8ff; cursor: not-allowed; }
+    .imgs-wrap { order: 1; padding: 10px; overflow-x: auto; }
+    .imgs { display: flex; gap: 8px; min-height: 255px; }
+    .thumb-wrap { position: relative; flex: 0 0 auto; }
+    .imgs img, .imgs video { width: 330px; height: 248px; object-fit: cover; border-radius: 8px; background: #eee; flex: 0 0 auto; }
+    .thumb-btn { border: 0; padding: 0; background: transparent; cursor: zoom-in; }
+    .mark-btn {
+      position: absolute; top: 8px; right: 8px;
+      width: 30px; height: 30px; border-radius: 999px;
+      border: 2px solid rgba(255,255,255,.95);
+      background: rgba(0,0,0,.35); color: transparent;
+      font-size: 18px; line-height: 24px; font-weight: 700;
+      cursor: pointer; z-index: 2;
+      display: flex; align-items: center; justify-content: center;
+      transition: all .15s ease;
+    }
+    .mark-btn:hover { background: rgba(0,0,0,.55); }
+    .mark-btn.bad {
+      border-color: #ff4d4f;
+      background: #ff4d4f;
+      color: #fff;
+      box-shadow: 0 2px 10px rgba(255,77,79,.45);
+    }
+    .mark-btn.good {
+      border-color: #52c41a;
+      background: #52c41a;
+      color: #fff;
+      box-shadow: 0 2px 10px rgba(82,196,26,.45);
+    }
+    .empty { background: #fff; border-radius: 12px; padding: 24px; color: #666; }
+    .viewer-mask {
+      position: fixed; inset: 0; background: rgba(0, 0, 0, 0.82);
+      display: none; align-items: center; justify-content: center; z-index: 9999;
+    }
+    .viewer-mask.show { display: flex; }
+    .viewer-content {
+      position: relative; width: min(95vw, 1800px); height: min(94vh, 1080px);
+      display: grid; grid-template-columns: 1fr 360px; gap: 14px;
+      background: #111722; border-radius: 14px; padding: 14px;
+      box-shadow: 0 12px 40px rgba(0,0,0,.45);
+    }
+    .viewer-meta {
+      background: #1a2130; border-radius: 10px; padding: 12px; color: #e8edf7;
+      font-size: 13px; line-height: 1.65; overflow-y: auto;
+    }
+    .viewer-meta b { color: #fff; }
+    .viewer-meta .viewer-title { margin-top: 8px; word-break: break-word; }
+    .viewer-meta .viewer-link { margin-top: 10px; font-size: 12px; word-break: break-all; }
+    .viewer-meta .viewer-link a { color: #8cb4ff; text-decoration: none; }
+    .viewer-main { position: relative; overflow: hidden; background: #0b0f17; border-radius: 10px; }
+    .viewer-stage {
+      position: absolute; inset: 0;
+      overflow: hidden;
+      padding: 10px 10px 24px 10px;
+      box-sizing: border-box;
+    }
+    .viewer-img {
+      position: absolute; left: 0; top: 0;
+      user-select: none;
+      -webkit-user-drag: none;
+      transform-origin: 0 0;
+      border-radius: 8px;
+    }
+    .viewer-video {
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      transform: translate(-50%, -50%);
+      width: min(92%, 1320px);
+      height: min(84%, 820px);
+      object-fit: contain;
+      background: #0b0f17;
+      display: none;
+      border-radius: 8px;
+    }
+    .viewer-main { cursor: grab; }
+    .viewer-main.dragging { cursor: grabbing; }
+    .viewer-btn {
+      position: absolute; top: 50%; transform: translateY(-50%);
+      width: 50px; height: 50px; border-radius: 999px; border: 0;
+      background: rgba(255,255,255,.2); color: #fff; font-size: 28px; cursor: pointer;
+      z-index: 20;
+    }
+    .viewer-btn:hover { background: rgba(255,255,255,.35); }
+    .viewer-prev { left: 10px; }
+    .viewer-next { right: 10px; }
+    .viewer-close {
+      position: absolute; top: -44px; right: 0;
+      width: 40px; height: 40px; border: 0; border-radius: 999px;
+      background: rgba(255,255,255,.2); color: #fff; font-size: 22px; cursor: pointer;
+    }
+    .viewer-index {
+      position: absolute; left: 50%; bottom: 8px; transform: translateX(-50%);
+      color: #dce3f3; font-size: 13px;
+      z-index: 20;
+    }
+    .viewer-bad-badge {
+      position: absolute; top: 24px; right: 24px;
+      width: 68px; height: 68px; border-radius: 999px;
+      border: 4px solid #ff4d4f; background: #ff4d4f; color: #fff;
+      font-size: 40px; font-weight: 800; line-height: 1;
+      display: none; align-items: center; justify-content: center;
+      box-shadow: 0 2px 10px rgba(255,77,79,.45);
+      z-index: 25;
+      pointer-events: none;
+    }
+    .viewer-bad-badge.show { display: flex; }
+    .viewer-good-badge {
+      position: absolute; top: 24px; right: 24px;
+      width: 68px; height: 68px; border-radius: 999px;
+      border: 4px solid #52c41a; background: #52c41a; color: #fff;
+      font-size: 40px; font-weight: 800; line-height: 1;
+      display: none; align-items: center; justify-content: center;
+      box-shadow: 0 2px 10px rgba(82,196,26,.45);
+      z-index: 25;
+      pointer-events: none;
+    }
+    .viewer-good-badge.show { display: flex; }
+    .viewer-mark {
+      margin-top: 12px; width: 100%;
+      height: 36px; border-radius: 8px; border: 1px solid #44506b;
+      background: #28334a; color: #e9eef8; cursor: pointer;
+    }
+    .viewer-mark.bad {
+      border-color: #ff4d4f; background: #ff4d4f; color: #fff;
+    }
+    .back-top {
+      position: fixed; right: 70px; bottom: 70px;
+      width: 92px; height: 92px; border: 0; border-radius: 999px;
+      background: rgba(17,23,34,.85); color: #fff; font-size: 40px;
+      cursor: pointer; box-shadow: 0 4px 14px rgba(0,0,0,.25);
+      display: none; align-items: center; justify-content: center;
+      z-index: 999;
+    }
+    .back-top.show { display: flex; }
+    .back-top:hover { background: rgba(17,23,34,.96); }
+  </style>
+</head>
+<body>
+  {# 视频走 bilibili 参数；微博 sinaimg 等仅使用 url + page_referer。#}
+  {% macro video_stream_url(media, share_url='') -%}
+/api/media-stream?url={{ media.url|urlencode }}{% if media.cdn_referer %}&page_referer={{ media.cdn_referer|urlencode }}{% endif %}{% if media.xhs_share_url %}&xhs_share_url={{ media.xhs_share_url|urlencode }}{% endif %}{% if media.xhs_image_index is not none and media.xhs_image_index != '' %}&xhs_image_index={{ media.xhs_image_index }}{% endif %}{% if media.source_file %}&source_file={{ media.source_file|urlencode }}{% endif %}{% if media.post_index is not none and media.post_index != '' %}&post_index={{ media.post_index }}{% endif %}{% if media.video_index is not none and media.video_index != '' %}&video_index={{ media.video_index }}{% endif %}{% if media.stream_bvid %}&bvid={{ media.stream_bvid|urlencode }}{% endif %}{% if media.stream_aid %}&aid={{ media.stream_aid|urlencode }}{% endif %}{% if media.stream_cid %}&cid={{ media.stream_cid|urlencode }}{% endif %}{% if share_url %}&share_url={{ share_url|urlencode }}{% endif %}
+  {%- endmacro %}
+  <div class="wrap">
+    <h1>Banniu 贴子媒体浏览（{{ media_type }}）</h1>
+    <p class="sub">数据目录：<code>{{ data_dir }}</code> ｜ 提取路径：<code>{{ media_source_path }}</code> ｜ 提取到 {{ count }} 条贴子记录</p>
+
+    {% if rows %}
+      <div class="rows">
+        {% for row in rows %}
+          {% set row_idx = loop.index0 %}
+          <section class="row">
+            <div class="meta">
+              <div><b>平台：</b>{{ row.platform }}</div>
+              <div><b>task_id：</b>{{ row.task_id }}</div>
+              <div><b>图片数：</b>{{ row.image_urls|length }}</div>
+              <div><b>视频数：</b>{{ row.video_urls|length }}</div>
+              <div><b>媒体数：</b>{{ row.media_items|length }}</div>
+              <button
+                class="submit-row-btn"
+                type="button"
+                data-source-file="{{ row.source_file }}"
+              >未标记默认为“符合”</button>
+              {% if row.title %}<div class="title"><b>标题：</b>{{ row.title }}</div>{% endif %}
+              {% if row.share_url %}
+                <div class="link">分享链接：<a href="{{ row.share_url }}" target="_blank" rel="noopener noreferrer">{{ row.share_url }}</a></div>
+              {% endif %}
+            </div>
+            <div class="imgs-wrap">
+              <div class="imgs">
+                {% for media in row.media_items %}
+                  <div class="thumb-wrap">
+                    <button class="mark-btn" type="button" title="标记为不符合" aria-label="mark-bad" data-mark-key="{{ row.platform }}::{{ row.task_id }}::{{ media.url }}">×</button>
+                    <button
+                      class="thumb-btn"
+                      type="button"
+                      data-original-url="{{ media.url }}"
+                      data-viewer-src="{% if media.type == 'video' %}{{ video_stream_url(media, row.share_url or '') }}{% elif media.cdn_referer %}{{ video_stream_url(media) }}{% else %}{{ media.url }}{% endif %}"
+                      data-media-type="{{ media.type }}"
+                      data-row-index="{{ row_idx }}"
+                      data-img-index="{{ loop.index0 }}"
+                      data-total-images="{{ row.media_items|length }}"
+                      data-platform="{{ row.platform }}"
+                      data-task-id="{{ row.task_id }}"
+                      data-title="{{ row.title }}"
+                      data-share-url="{{ row.share_url or '' }}"
+                      data-mark-key="{{ row.platform }}::{{ row.task_id }}::{{ media.url }}"
+                    >
+                      {% if media.type == 'video' %}
+                        <video src="{{ video_stream_url(media, row.share_url or '') }}" preload="metadata" muted playsinline></video>
+                      {% elif media.type == 'image' %}
+                        <img src="{{ video_stream_url(media) }}" loading="lazy" alt="image" />
+                      {% else %}
+                        <img src="{{ media.url }}" loading="lazy" alt="image" referrerpolicy="no-referrer" />
+                      {% endif %}
+                    </button>
+                  </div>
+                {% endfor %}
+              </div>
+            </div>
+          </section>
+        {% endfor %}
+      </div>
+    {% else %}
+      <div class="empty">当前目录没有可展示的图片元信息。</div>
+    {% endif %}
+  </div>
+  <button id="backTopBtn" class="back-top" type="button" aria-label="返回顶部" title="返回顶部">↑</button>
+
+  <div id="viewerMask" class="viewer-mask" aria-hidden="true">
+    <div class="viewer-content">
+      <button id="viewerClose" class="viewer-close" type="button" aria-label="close">×</button>
+      <main class="viewer-main">
+        <button id="viewerPrev" class="viewer-btn viewer-prev" type="button" aria-label="prev">‹</button>
+        <div id="viewerGoodBadge" class="viewer-good-badge">✓</div>
+        <div id="viewerBadBadge" class="viewer-bad-badge">✕</div>
+        <div id="viewerStage" class="viewer-stage">
+          <img id="viewerImg" class="viewer-img" src="" alt="preview" />
+          <video id="viewerVideo" class="viewer-video" controls preload="metadata" playsinline></video>
+        </div>
+        <button id="viewerNext" class="viewer-btn viewer-next" type="button" aria-label="next">›</button>
+        <div id="viewerIndex" class="viewer-index"></div>
+      </main>
+      <aside class="viewer-meta">
+        <div><b>平台：</b><span id="vPlatform"></span></div>
+        <div><b>task_id：</b><span id="vTaskId"></span></div>
+        <div><b>媒体：</b><span id="vPos"></span></div>
+        <div class="viewer-title"><b>标题：</b><span id="vTitle"></span></div>
+        <div class="viewer-link"><b>分享链接：</b><a id="vShareUrl" href="#" target="_blank" rel="noopener noreferrer"></a></div>
+        <button id="viewerMarkBtn" class="viewer-mark" type="button">标记为不符合</button>
+      </aside>
+    </div>
+  </div>
+
+  <script>
+    (() => {
+      const mask = document.getElementById('viewerMask');
+      const vImg = document.getElementById('viewerImg');
+      const vVideo = document.getElementById('viewerVideo');
+      const viewerStage = document.getElementById('viewerStage');
+      const viewerMain = document.querySelector('.viewer-main');
+      const vPlatform = document.getElementById('vPlatform');
+      const vTaskId = document.getElementById('vTaskId');
+      const vPos = document.getElementById('vPos');
+      const vTitle = document.getElementById('vTitle');
+      const vShareUrl = document.getElementById('vShareUrl');
+      const vIndex = document.getElementById('viewerIndex');
+      const vMarkBtn = document.getElementById('viewerMarkBtn');
+      const vBadBadge = document.getElementById('viewerBadBadge');
+      const vGoodBadge = document.getElementById('viewerGoodBadge');
+      const btnPrev = document.getElementById('viewerPrev');
+      const btnNext = document.getElementById('viewerNext');
+      const btnClose = document.getElementById('viewerClose');
+      const backTopBtn = document.getElementById('backTopBtn');
+
+      const MARK_STORE_KEY = `gallery_marks::{{ data_dir }}`;
+      const badSet = new Set();
+      const goodSet = new Set();
+      let flatList = [];
+      let currentIdx = 0;
+      let scale = 1;
+      let tx = 0;
+      let ty = 0;
+      let fitScale = 1;
+      let dragging = false;
+      let dragStartX = 0;
+      let dragStartY = 0;
+      let dragBaseX = 0;
+      let dragBaseY = 0;
+      let imgNaturalW = 0;
+      let imgNaturalH = 0;
+      let currentMediaType = 'image';
+      let backdropMouseDown = false;
+
+      function saveMarks() {
+        try {
+          const payload = { bad: Array.from(badSet), good: Array.from(goodSet) };
+          localStorage.setItem(MARK_STORE_KEY, JSON.stringify(payload));
+        } catch (_) {}
+      }
+
+      function loadMarks() {
+        try {
+          const raw = localStorage.getItem(MARK_STORE_KEY);
+          if (!raw) return;
+          const parsed = JSON.parse(raw);
+          const bad = Array.isArray(parsed?.bad) ? parsed.bad : [];
+          const good = Array.isArray(parsed?.good) ? parsed.good : [];
+          bad.forEach((k) => badSet.add(String(k)));
+          good.forEach((k) => goodSet.add(String(k)));
+          // 历史数据里若同一 key 同时存在，强制互斥。
+          goodSet.forEach((k) => badSet.delete(k));
+        } catch (_) {}
+      }
+
+      function applyTransform() {
+        clampPan();
+        vImg.style.transform = `translate(${tx}px, ${ty}px) scale(${scale})`;
+      }
+
+      function clampPan() {
+        // 自由拖动模式：不做边界钳制。
+      }
+
+      function fitImageToViewer() {
+        const vw = viewerStage.clientWidth;
+        const vh = viewerStage.clientHeight;
+        const iw = vImg.naturalWidth || 0;
+        const ih = vImg.naturalHeight || 0;
+        if (!vw || !vh || !iw || !ih) return;
+        imgNaturalW = iw;
+        imgNaturalH = ih;
+        vImg.style.width = `${iw}px`;
+        vImg.style.height = `${ih}px`;
+        fitScale = Math.min(vw / iw, vh / ih, 1);
+        scale = fitScale;
+        tx = (vw - iw * scale) / 2;
+        ty = (vh - ih * scale) / 2;
+        viewerMain.classList.remove('dragging');
+        applyTransform();
+      }
+
+      function syncMarks() {
+        document.querySelectorAll('.mark-btn').forEach((btn) => {
+          const key = btn.dataset.markKey || '';
+          const isBad = badSet.has(key);
+          const isGood = goodSet.has(key);
+          btn.classList.toggle('bad', isBad);
+          btn.classList.toggle('good', isGood);
+          btn.textContent = isBad ? '✕' : (isGood ? '✓' : '×');
+          btn.title = isBad ? '已标记不符合（点击取消）' : (isGood ? '已标记符合（可按回车切换）' : '标记为不符合');
+        });
+        const key = flatList[currentIdx]?.markKey || '';
+        const bad = badSet.has(key);
+        const good = goodSet.has(key);
+        vMarkBtn.classList.toggle('bad', bad);
+        vMarkBtn.textContent = bad ? '已标记不符合（点击取消）' : '标记为不符合';
+        vBadBadge.classList.toggle('show', bad);
+        vGoodBadge.classList.toggle('show', good);
+      }
+
+      function renderViewer() {
+        const item = flatList[currentIdx];
+        if (!item) return;
+        currentMediaType = item.mediaType || 'image';
+        if (currentMediaType === 'video') {
+          vImg.style.display = 'none';
+          vVideo.style.display = 'block';
+          vVideo.src = item.src;
+          vVideo.currentTime = 0;
+          vVideo.play().catch(() => {});
+        } else {
+          vVideo.pause();
+          vVideo.removeAttribute('src');
+          vVideo.load();
+          vVideo.style.display = 'none';
+          vImg.style.display = 'block';
+          vImg.src = item.src;
+          if (vImg.complete && vImg.naturalWidth > 0) fitImageToViewer();
+          else {
+            vImg.onload = () => fitImageToViewer();
+          }
+        }
+        vPlatform.textContent = item.platform || '';
+        vTaskId.textContent = item.taskId || '';
+        vPos.textContent = `${currentIdx + 1} / ${flatList.length}`;
+        vTitle.textContent = item.title || '';
+        vShareUrl.textContent = item.shareUrl || '-';
+        vShareUrl.href = item.shareUrl || '#';
+        vIndex.textContent = `${currentIdx + 1} / ${flatList.length}（方向键切换，Space 视频暂停/播放或图片下一张，Enter 符合，Backspace 不符合，Esc 关闭）`;
+        syncMarks();
+      }
+
+      function openViewer(startIdx) {
+        currentIdx = Math.max(0, Math.min(startIdx || 0, flatList.length - 1));
+        if (!flatList.length) return;
+        mask.classList.add('show');
+        mask.setAttribute('aria-hidden', 'false');
+        document.body.style.overflow = 'hidden';
+        // 先让弹层完成布局，再计算 fit，避免首次打开时尺寸未就绪导致不居中。
+        requestAnimationFrame(() => {
+          renderViewer();
+        });
+      }
+
+      function closeViewer() {
+        vVideo.pause();
+        mask.classList.remove('show');
+        mask.setAttribute('aria-hidden', 'true');
+        document.body.style.overflow = '';
+        dragging = false;
+      }
+
+      function prev() {
+        if (!flatList.length) return;
+        currentIdx = (currentIdx - 1 + flatList.length) % flatList.length;
+        renderViewer();
+      }
+
+      function next() {
+        if (!flatList.length) return;
+        currentIdx = (currentIdx + 1) % flatList.length;
+        renderViewer();
+      }
+
+      document.querySelectorAll('.mark-btn').forEach((btn) => {
+        btn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          e.preventDefault();
+          const key = btn.dataset.markKey || '';
+          if (!key) return;
+          if (badSet.has(key)) badSet.delete(key);
+          else {
+            badSet.add(key);
+            goodSet.delete(key);
+          }
+          saveMarks();
+          syncMarks();
+        });
+      });
+
+      const allThumbs = Array.from(document.querySelectorAll('.thumb-btn'));
+      flatList = allThumbs.map((btn) => ({
+          src: btn.dataset.viewerSrc || '',
+          originalUrl: btn.dataset.originalUrl || '',
+          mediaType: btn.dataset.mediaType || 'image',
+          platform: btn.dataset.platform || '',
+          taskId: btn.dataset.taskId || '',
+          title: btn.dataset.title || '',
+          shareUrl: btn.dataset.shareUrl || '',
+          markKey: btn.dataset.markKey || '',
+      })).filter((x) => x.src);
+
+      loadMarks();
+      syncMarks();
+
+      allThumbs.forEach((btn, i) => {
+        btn.addEventListener('click', (e) => {
+          e.preventDefault();
+          openViewer(i);
+        });
+      });
+
+      vMarkBtn.addEventListener('click', () => {
+        const key = flatList[currentIdx]?.markKey || '';
+        if (!key) return;
+        if (badSet.has(key)) badSet.delete(key);
+        else {
+          badSet.add(key);
+          goodSet.delete(key);
+        }
+        saveMarks();
+        syncMarks();
+      });
+
+      btnPrev.addEventListener('click', prev);
+      btnNext.addEventListener('click', next);
+      btnClose.addEventListener('click', closeViewer);
+      mask.addEventListener('mousedown', (e) => {
+        backdropMouseDown = (e.target === mask);
+      });
+      mask.addEventListener('mouseup', (e) => {
+        if (backdropMouseDown && e.target === mask) {
+          closeViewer();
+        }
+        backdropMouseDown = false;
+      });
+
+      document.addEventListener('keydown', (e) => {
+        if (!mask.classList.contains('show')) return;
+        if (e.key === 'Escape') closeViewer();
+        else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') prev();
+        else if (e.key === 'ArrowRight' || e.key === 'ArrowDown') next();
+        else if (e.key === ' ' || e.code === 'Space') {
+          e.preventDefault();
+          if (currentMediaType === 'video') {
+            if (vVideo.paused) vVideo.play().catch(() => {});
+            else vVideo.pause();
+          } else {
+            next();
+          }
+        }
+        else if (e.key === 'Enter') {
+          e.preventDefault();
+          const key = flatList[currentIdx]?.markKey || '';
+          if (!key) return;
+          if (goodSet.has(key)) goodSet.delete(key);
+          else {
+            goodSet.add(key);
+            badSet.delete(key);
+          }
+          saveMarks();
+          syncMarks();
+        }
+        else if (e.key === 'Backspace') {
+          e.preventDefault();
+          const key = flatList[currentIdx]?.markKey || '';
+          if (!key) return;
+          if (badSet.has(key)) badSet.delete(key);
+          else {
+            badSet.add(key);
+            goodSet.delete(key);
+          }
+          saveMarks();
+          syncMarks();
+        }
+      });
+
+      viewerMain.addEventListener('wheel', (e) => {
+        if (!mask.classList.contains('show')) return;
+        if (currentMediaType !== 'image') return;
+        e.preventDefault();
+        const oldScale = scale || 1;
+        const delta = e.deltaY;
+        const factor = delta > 0 ? 0.92 : 1.08;
+        const nextScale = Math.max(Math.max(fitScale * 0.3, 0.05), Math.min(6, scale * factor));
+        const newScale = Number(nextScale.toFixed(4));
+        const rect = vImg.getBoundingClientRect();
+        const ratio = newScale / oldScale;
+        // 以鼠标位置为缩放中心：按当前渲染矩形直接修正位移，避免缩放时向右下漂移。
+        const dx = (e.clientX - rect.left) * (1 - ratio);
+        const dy = (e.clientY - rect.top) * (1 - ratio);
+        scale = newScale;
+        tx += dx;
+        ty += dy;
+        applyTransform();
+      }, { passive: false });
+
+      vImg.addEventListener('mousedown', (e) => {
+        if (!mask.classList.contains('show')) return;
+        if (currentMediaType !== 'image') return;
+        dragging = true;
+        dragStartX = e.clientX;
+        dragStartY = e.clientY;
+        dragBaseX = tx;
+        dragBaseY = ty;
+        viewerMain.classList.add('dragging');
+        e.preventDefault();
+      });
+
+      window.addEventListener('mousemove', (e) => {
+        if (!dragging) return;
+        tx = dragBaseX + (e.clientX - dragStartX);
+        ty = dragBaseY + (e.clientY - dragStartY);
+        applyTransform();
+      });
+
+      window.addEventListener('mouseup', () => {
+        if (!dragging) return;
+        dragging = false;
+        viewerMain.classList.remove('dragging');
+      });
+
+      window.addEventListener('resize', () => {
+        if (!mask.classList.contains('show')) return;
+        // 视窗变化后重新按固定规则初始化展示，避免尺寸漂移。
+        fitImageToViewer();
+      });
+
+      function updateBackTopVisible() {
+        const y = window.scrollY || document.documentElement.scrollTop || 0;
+        backTopBtn.classList.toggle('show', y > 280);
+      }
+      backTopBtn.addEventListener('click', () => {
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      });
+      window.addEventListener('scroll', updateBackTopVisible, { passive: true });
+      updateBackTopVisible();
+
+      document.querySelectorAll('.submit-row-btn').forEach((btn) => {
+        btn.addEventListener('click', async () => {
+          const sourceFile = btn.dataset.sourceFile || '';
+          if (!sourceFile) return;
+          // 第一次点击：仅激活提交态；第二次点击：直接提交。
+          if (!btn.classList.contains('armed')) {
+            btn.classList.add('armed');
+            btn.textContent = '提交';
+            return;
+          }
+          btn.disabled = true;
+          const oldText = btn.textContent;
+          btn.textContent = '提交中...';
+          try {
+            const rowEl = btn.closest('.row');
+            const imageMarks = {};
+            if (rowEl) {
+              rowEl.querySelectorAll('.thumb-btn').forEach((thumbBtn) => {
+                const imageUrl = thumbBtn.dataset.originalUrl || thumbBtn.dataset.viewerSrc || '';
+                const markKey = thumbBtn.dataset.markKey || '';
+                if (!imageUrl || !markKey) return;
+                let label = '';
+                if (badSet.has(markKey)) label = '不符合';
+                else if (goodSet.has(markKey)) label = '符合';
+                imageMarks[imageUrl] = label;
+              });
+            }
+
+            let resp = await fetch('/api/submit-row', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                source_file: sourceFile,
+                image_marks: imageMarks,
+              }),
+            });
+            // 兼容旧服务路由名，避免 404 Not Found。
+            if (resp.status === 404) {
+              resp = await fetch('/api/submit_row', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  source_file: sourceFile,
+                  image_marks: imageMarks,
+                }),
+              });
+            }
+            const data = await resp.json();
+            if (!resp.ok || !data?.ok) {
+              throw new Error(data?.detail || '提交失败');
+            }
+            btn.textContent = '已提交';
+            if (rowEl) {
+              rowEl.style.maxHeight = `${rowEl.offsetHeight}px`;
+              rowEl.style.marginBottom = '12px';
+              // 下一帧切换到 removing，触发折叠动画并让下面行自然上移。
+              requestAnimationFrame(() => {
+                rowEl.classList.add('removing');
+              });
+              setTimeout(() => {
+                rowEl.remove();
+                const rowsWrap = document.querySelector('.rows');
+                if (rowsWrap && rowsWrap.children.length === 0) {
+                  window.location.reload();
+                }
+              }, 320);
+            }
+          } catch (err) {
+            btn.disabled = false;
+            btn.classList.add('armed');
+            btn.textContent = oldText || '提交';
+            window.alert(`提交失败：${err?.message || err}`);
+          }
+        });
+      });
+    })();
+  </script>
+</body>
+</html>

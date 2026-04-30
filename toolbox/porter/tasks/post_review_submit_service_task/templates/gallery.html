@@ -1,0 +1,639 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>搬牛 - 帖子综合审核</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { font-family: -apple-system, Segoe UI, "PingFang SC", "Microsoft YaHei", sans-serif; margin: 0; background: #f0f2f5; color: #1d2129; }
+    .wrap { max-width: 1600px; margin: 0 auto; padding: 20px 16px; }
+    .header { background: linear-gradient(135deg, #1890ff 0%, #096dd9 100%); color: #fff; padding: 20px 28px; border-radius: 14px; margin-bottom: 20px; }
+    .header h1 { margin: 0 0 6px; font-size: 22px; font-weight: 600; }
+    .header p { margin: 0; opacity: 0.85; font-size: 13px; }
+
+    .rows { display: flex; flex-direction: column; gap: 12px; }
+    .row {
+      background: #fff;
+      border-radius: 12px;
+      box-shadow: 0 1px 4px rgba(0,0,0,.08);
+      overflow: hidden;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 240px;
+    }
+    .row.removing { opacity: 0; transform: translateY(-8px) scale(.985); max-height: 0; margin: 0; padding: 0; border: 0; transition: opacity .2s ease, transform .22s ease, max-height .28s ease, margin .28s ease, padding .28s ease; }
+
+    .left-panel { min-width: 0; display: flex; flex-direction: column; overflow: hidden; }
+    .post-main { padding: 14px 16px; background: #fafcff; border-bottom: 1px solid #f0f0f0; min-width: 0; }
+    .post-main-left { min-width: 0; }
+    .post-side {
+      border-left: 1px solid #eee;
+      padding: 12px;
+      font-size: 13px;
+      line-height: 1.6;
+      display: flex;
+      flex-direction: column;
+      align-self: stretch;
+      background: #fff;
+    }
+    .info-line { margin-top: 8px; font-size: 13px; line-height: 1.65; color: #303133; word-break: break-word; }
+    .info-line .label { color: #606266; margin-right: 6px; }
+    .info-line .value { color: #1f2329; }
+    .post-media-row { padding: 10px; border-bottom: 1px solid #f5f5f5; }
+    .post-media-row.videos-row { border-bottom: none; }
+    .post-media-row:last-child { border-bottom: none; }
+    .post-media-row.images-row { background: #f7f8fa; }
+    .post-media-row.videos-row { background: #fafbfc; }
+
+    .platform-badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; margin-right: 8px; vertical-align: middle; }
+    .platform-douyin { background: #fe2c55; color: #fff; }
+    .platform-xiaohongshu { background: #ff2442; color: #fff; }
+    .platform-bilibili { background: #fb7299; color: #fff; }
+    .platform-kuaishou { background: #ff4906; color: #fff; }
+    .platform-weibo { background: #e6162d; color: #fff; }
+    .platform-dewu { background: #1a1a1a; color: #fff; }
+    .platform-xiaoheihe { background: #5ccc8c; color: #fff; }
+
+    .task-id { font-size: 11px; color: #8c8c8c; margin-bottom: 6px; }
+    .section-label { font-size: 11px; color: #8c8c8c; margin-bottom: 6px; text-transform: uppercase; letter-spacing: .5px; }
+
+    .title-text { font-size: 14px; font-weight: 600; color: #1d2129; line-height: 1.5; word-break: break-word; }
+    .desc-text { font-size: 12px; color: #4b4b4b; line-height: 1.6; margin-top: 4px; word-break: break-word; }
+
+    .author-row { display: flex; align-items: center; gap: 7px; }
+    .author-avatar { width: 28px; height: 28px; border-radius: 50%; background: linear-gradient(135deg, #1890ff, #69c0ff); display: flex; align-items: center; justify-content: center; color: #fff; font-size: 12px; font-weight: 600; flex-shrink: 0; }
+    .author-name { font-size: 12px; font-weight: 500; color: #1d2129; }
+    .author-uid { font-size: 10px; color: #8c8c8c; }
+
+    .interact-stats { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 8px; }
+    .interact-stat { display: flex; align-items: center; gap: 4px; font-size: 12px; color: #595959; }
+    .interact-stat .val { font-weight: 600; color: #1d2129; }
+
+    .share-url { font-size: 11px; color: #8c8c8c; word-break: break-all; margin-top: 6px; }
+    .share-url a { color: #1890ff; text-decoration: none; }
+
+    .imgs-wrap { overflow-x: auto; }
+    .imgs { display: flex; gap: 8px; min-height: 248px; }
+    .thumb-wrap { position: relative; flex: 0 0 auto; }
+    .thumb-btn { border: 0; padding: 0; background: transparent; cursor: zoom-in; position: relative; }
+    .imgs img, .imgs video { width: 330px; height: 248px; object-fit: cover; border-radius: 8px; background: #eee; flex: 0 0 auto; pointer-events: none; }
+    .thumb-btn[data-media-type="video"]::after { content: '▶'; position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 36px; color: rgba(255,255,255,.85); text-shadow: 0 2px 8px rgba(0,0,0,.4); pointer-events: none; }
+
+    .mark-btn {
+      position: absolute; top: 8px; right: 8px;
+      width: 30px; height: 30px; border-radius: 999px;
+      border: 2px solid rgba(255,255,255,.95);
+      background: rgba(0,0,0,.35); color: transparent;
+      font-size: 18px; line-height: 24px; font-weight: 700;
+      cursor: pointer; z-index: 2;
+      display: flex; align-items: center; justify-content: center;
+      transition: all .15s ease;
+    }
+    .mark-btn:hover { background: rgba(0,0,0,.55); }
+    .mark-btn.bad { border-color: #ff4d4f; background: #ff4d4f; color: #fff; box-shadow: 0 2px 10px rgba(255,77,79,.45); }
+    .mark-btn.good { border-color: #52c41a; background: #52c41a; color: #fff; box-shadow: 0 2px 10px rgba(82,196,26,.45); }
+
+    .submit-row-btn { margin-top: 10px; width: 100%; height: 34px; border: 1px solid #d9d9d9; border-radius: 8px; background: #fff; color: #333; font-size: 13px; cursor: pointer; }
+    .post-side .submit-row-btn { margin-top: 10px; }
+    .submit-row-btn:hover { background: #f5f5f5; }
+    .submit-row-btn.armed { border-color: #1677ff; background: #1677ff; color: #fff; }
+    .submit-row-btn.armed:hover { background: #0958d9; }
+    .submit-row-btn:disabled { background: #8fb8ff; cursor: not-allowed; }
+
+    .score-list { margin-top: 10px; padding-top: 10px; border-top: 1px dashed #e8e8e8; display: flex; flex-direction: column; gap: 6px; }
+    .score-item { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 12px; color: #595959; }
+    .score-item .k { color: #606266; }
+    .score-item .v { font-weight: 700; color: #1f2329; }
+    .post-side .link { margin-top: 10px; font-size: 12px; color: #666; word-break: break-all; }
+
+    .back-top { position: fixed; right: 70px; bottom: 70px; width: 92px; height: 92px; border: 0; border-radius: 999px; background: rgba(17,23,34,.85); color: #fff; font-size: 40px; cursor: pointer; display: none; align-items: center; justify-content: center; z-index: 999; box-shadow: 0 4px 14px rgba(0,0,0,.25); }
+    .back-top.show { display: flex; }
+    .back-top:hover { background: rgba(17,23,34,.96); }
+
+    .empty-state { background: #fff; border-radius: 12px; padding: 50px; text-align: center; color: #8c8c8c; }
+    .empty-state .icon { font-size: 42px; margin-bottom: 12px; }
+    .empty-state .text { font-size: 14px; }
+
+    @media (max-width: 1100px) {
+      .row { grid-template-columns: 1fr; }
+      .post-side {
+        border-left: none;
+        border-bottom: 1px solid #f0f0f0;
+      }
+    }
+
+    /* Viewer */
+    .viewer-mask { position: fixed; inset: 0; background: rgba(0,0,0,.82); display: none; align-items: center; justify-content: center; z-index: 9999; }
+    .viewer-mask.show { display: flex; }
+    .viewer-content { position: relative; width: min(95vw, 1800px); height: min(94vh, 1080px); display: grid; grid-template-columns: 1fr 360px; gap: 14px; background: #111722; border-radius: 14px; padding: 14px; box-shadow: 0 12px 40px rgba(0,0,0,.45); }
+    .viewer-main { position: relative; overflow: hidden; background: #0b0f17; border-radius: 10px; cursor: grab; }
+    .viewer-main.dragging { cursor: grabbing; }
+    .viewer-stage { position: absolute; inset: 0; overflow: hidden; padding: 10px 10px 24px 10px; box-sizing: border-box; }
+    .viewer-img { position: absolute; left: 0; top: 0; user-select: none; -webkit-user-drag: none; transform-origin: 0 0; border-radius: 8px; }
+    .viewer-video { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); max-width: 92%; max-height: 84%; object-fit: contain; background: #0b0f17; display: none; border-radius: 8px; }
+    .viewer-meta { background: #1a2130; border-radius: 10px; padding: 12px; color: #e8edf7; font-size: 13px; line-height: 1.65; overflow-y: auto; }
+    .viewer-meta b { color: #fff; }
+    .viewer-meta .viewer-title { margin-top: 8px; word-break: break-word; }
+    .viewer-meta .viewer-link { margin-top: 10px; font-size: 12px; word-break: break-all; }
+    .viewer-meta .viewer-link a { color: #8cb4ff; text-decoration: none; }
+    .viewer-meta .meta-item { margin-bottom: 6px; }
+    .viewer-meta .viewer-mark { margin-top: 10px; width: 100%; height: 34px; border-radius: 7px; border: 1px solid #44506b; background: #28334a; color: #e9eef8; cursor: pointer; font-size: 13px; font-weight: 600; }
+    .viewer-meta .viewer-mark:hover { background: #34455e; }
+    .viewer-meta .viewer-mark.bad { border-color: #ff4d4f; background: #ff4d4f; color: #fff; }
+    .viewer-btn { position: absolute; top: 50%; transform: translateY(-50%); width: 50px; height: 50px; border-radius: 999px; border: 0; background: rgba(255,255,255,.2); color: #fff; font-size: 28px; cursor: pointer; z-index: 20; }
+    .viewer-btn:hover { background: rgba(255,255,255,.35); }
+    .viewer-prev { left: 10px; }
+    .viewer-next { right: 10px; }
+    .viewer-close { position: absolute; top: -44px; right: 0; width: 40px; height: 40px; border: 0; border-radius: 999px; background: rgba(255,255,255,.2); color: #fff; font-size: 22px; cursor: pointer; }
+    .viewer-index { position: absolute; left: 50%; bottom: 8px; transform: translateX(-50%); color: #dce3f3; font-size: 13px; z-index: 20; }
+    .viewer-good-badge { position: absolute; top: 24px; right: 24px; width: 68px; height: 68px; border-radius: 999px; border: 4px solid #52c41a; background: #52c41a; color: #fff; font-size: 40px; font-weight: 800; line-height: 1; display: none; align-items: center; justify-content: center; box-shadow: 0 2px 10px rgba(82,196,26,.45); z-index: 25; pointer-events: none; }
+    .viewer-good-badge.show { display: flex; }
+    .viewer-bad-badge { position: absolute; top: 24px; right: 24px; width: 68px; height: 68px; border-radius: 999px; border: 4px solid #ff4d4f; background: #ff4d4f; color: #fff; font-size: 40px; font-weight: 800; line-height: 1; display: none; align-items: center; justify-content: center; box-shadow: 0 2px 10px rgba(255,77,79,.45); z-index: 25; pointer-events: none; }
+    .viewer-bad-badge.show { display: flex; }
+  </style>
+</head>
+<body>
+{% macro image_stream_url(url, platform, share_url='', image_index=0) -%}
+/api/media-stream?url={{ url|urlencode }}&platform={{ platform }}{% if share_url %}&share_url={{ share_url|urlencode }}{% endif %}&image_index={{ image_index }}&media_type=image
+{%- endmacro %}
+
+{% macro video_stream_url(url, platform, share_url='', video_index=0) -%}
+/api/media-stream?url={{ url|urlencode }}&platform={{ platform }}{% if share_url %}&share_url={{ share_url|urlencode }}{% endif %}&video_index={{ video_index }}&media_type=video
+{%- endmacro %}
+
+<div class="wrap">
+  <div class="header">
+    <h1>搬牛 - 帖子综合审核</h1>
+    <p>帖子完整信息展示（标题、描述、作者、互动数据、图片、视频），支持审核提交</p>
+  </div>
+
+  {% if rows %}
+  <div class="rows">
+    {% for row in rows %}
+    <section class="row" data-source-file="{{ row.source_file }}" data-platform="{{ row.platform }}" data-task-id="{{ row.task_id }}">
+      <div class="left-panel">
+        <div class="post-main">
+          <div class="post-main-left">
+            <span class="platform-badge platform-{{ row.platform }}">{{ {'douyin':'抖音','xiaohongshu':'小红书','bilibili':'B站','kuaishou':'快手','weibo':'微博','dewu':'得物','xiaoheihe':'小黑盒'}.get(row.platform, row.platform) }}</span>
+            <div class="task-id" style="margin-top: 6px;">task_id: {{ row.task_id }}</div>
+            <div class="info-line"><span class="label">标题：</span><span class="value">{{ row.title or '-' }}</span></div>
+            <div class="info-line"><span class="label">正文：</span><span class="value">{{ row.desc or '-' }}</span></div>
+            <div class="info-line">
+              <span class="label">作者：</span>
+              <span class="value">{{ row.author_nickname or '-' }}{% if row.author_uid %}（UID: {{ row.author_uid[:16] }}...）{% endif %}</span>
+            </div>
+
+            <div class="interact-stats" style="margin-top: 8px;">
+              <div class="interact-stat">👍 <span class="val">{{ row.digg_count }}</span></div>
+              <div class="interact-stat">💬 <span class="val">{{ row.comment_count }}</span></div>
+              <div class="interact-stat">⭐ <span class="val">{{ row.collect_count }}</span></div>
+              <div class="interact-stat">↗️ <span class="val">{{ row.share_count }}</span></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="post-media-row images-row">
+          {% if row.image_urls %}
+          <div class="imgs-wrap">
+            <div class="imgs">
+              {% for img_url in row.image_urls %}
+              <div class="thumb-wrap">
+                <button class="mark-btn" type="button" title="标记为不符合" data-mark-key="{{ row.platform }}::{{ row.task_id }}::{{ img_url }}">×</button>
+                <button class="thumb-btn"
+                  data-media-type="image"
+                  data-url="{{ img_url }}"
+                  data-original-url="{{ img_url }}"
+                  data-viewer-src="{{ image_stream_url(img_url, row.platform, row.share_url or '', loop.index0) }}"
+                  data-platform="{{ row.platform }}"
+                  data-share-url="{{ row.share_url or '' }}"
+                  data-index="{{ loop.index0 }}"
+                  data-title="{{ row.title or '' }}"
+                  data-mark-key="{{ row.platform }}::{{ row.task_id }}::{{ img_url }}">
+                  <img src="{{ image_stream_url(img_url, row.platform, row.share_url or '', loop.index0) }}" loading="lazy" alt="image" />
+                </button>
+              </div>
+              {% endfor %}
+            </div>
+          </div>
+          {% else %}
+          <div style="color: #b0b0b0; font-size: 12px; padding: 14px; text-align: center;">无图片</div>
+          {% endif %}
+        </div>
+
+        <div class="post-media-row videos-row">
+          {% if row.video_urls %}
+          <div class="imgs-wrap">
+            <div class="imgs">
+              {% for vid_url in row.video_urls %}
+              <div class="thumb-wrap">
+                <button class="mark-btn" type="button" title="标记为不符合" data-mark-key="{{ row.platform }}::{{ row.task_id }}::{{ vid_url }}">×</button>
+                <button class="thumb-btn"
+                  data-media-type="video"
+                  data-url="{{ vid_url }}"
+                  data-original-url="{{ vid_url }}"
+                  data-viewer-src="{{ video_stream_url(vid_url, row.platform, row.share_url or '', loop.index0) }}"
+                  data-platform="{{ row.platform }}"
+                  data-share-url="{{ row.share_url or '' }}"
+                  data-index="{{ loop.index0 }}"
+                  data-title="{{ row.title or '' }}"
+                  data-mark-key="{{ row.platform }}::{{ row.task_id }}::{{ vid_url }}">
+                  <video src="{{ video_stream_url(vid_url, row.platform, row.share_url or '', loop.index0) }}" preload="metadata" muted playsinline></video>
+                </button>
+              </div>
+              {% endfor %}
+            </div>
+          </div>
+          {% else %}
+          <div style="color: #b0b0b0; font-size: 12px; padding: 14px; text-align: center;">无视频</div>
+          {% endif %}
+        </div>
+      </div>
+
+      <div class="post-side">
+        <button class="submit-row-btn" type="button" data-source-file="{{ row.source_file }}">未标记默认为"符合"</button>
+
+        {% if row.share_url %}
+        <div class="link">分享链接：<a href="{{ row.share_url }}" target="_blank" rel="noopener noreferrer">{{ row.share_url[:60] }}{% if row.share_url|length > 60 %}...{% endif %}</a></div>
+        {% endif %}
+
+        <div class="score-list">
+          <div class="score-item"><span class="k">文本评分</span><span class="v">{{ row.text_score if row.text_score is not none else '-' }}</span></div>
+          <div class="score-item"><span class="k">图片评分</span><span class="v">{{ row.image_score if row.image_score is not none else '-' }}</span></div>
+          <div class="score-item"><span class="k">视频评分</span><span class="v">{{ row.video_score if row.video_score is not none else '-' }}</span></div>
+        </div>
+      </div>
+    </section>
+    {% endfor %}
+  </div>
+  {% else %}
+  <div class="empty-state">
+    <div class="icon">📭</div>
+    <div class="text">当前目录没有可审核的帖子数据</div>
+  </div>
+  {% endif %}
+</div>
+
+<button id="backTopBtn" class="back-top" type="button">↑</button>
+
+<div id="viewerMask" class="viewer-mask" aria-hidden="true">
+  <div class="viewer-content">
+    <button id="viewerClose" class="viewer-close" type="button" aria-label="close">×</button>
+    <main class="viewer-main">
+      <button id="viewerPrev" class="viewer-btn viewer-prev" type="button" aria-label="prev">‹</button>
+      <div id="viewerGoodBadge" class="viewer-good-badge">✓</div>
+      <div id="viewerBadBadge" class="viewer-bad-badge">✕</div>
+      <div id="viewerStage" class="viewer-stage">
+        <img id="viewerImg" class="viewer-img" src="" alt="preview" />
+        <video id="viewerVideo" class="viewer-video" controls preload="metadata" playsinline muted></video>
+      </div>
+      <button id="viewerNext" class="viewer-btn viewer-next" type="button" aria-label="next">›</button>
+      <div id="viewerIndex" class="viewer-index"></div>
+    </main>
+    <aside class="viewer-meta">
+      <div class="meta-item"><b>平台：</b><span id="vPlatform"></span></div>
+      <div class="meta-item"><b>task_id：</b><span id="vTaskId"></span></div>
+      <div class="meta-item"><b>媒体：</b><span id="vPos"></span></div>
+      <div class="viewer-title"><b>标题：</b><span id="vTitle"></span></div>
+      <div class="viewer-link"><b>分享链接：</b><a id="vShareUrl" href="#" target="_blank" rel="noopener noreferrer"></a></div>
+      <button id="viewerMarkBtn" class="viewer-mark" type="button">标记为不符合</button>
+    </aside>
+  </div>
+</div>
+
+<script>
+(() => {
+  const mask = document.getElementById('viewerMask');
+  const vImg = document.getElementById('viewerImg');
+  const vVideo = document.getElementById('viewerVideo');
+  vVideo.addEventListener('error', e => { console.error('Video error event:', vVideo.error, 'src:', vVideo.src); });
+  vVideo.addEventListener('stalled', () => { console.warn('Video stalled, src:', vVideo.src); });
+  const viewerStage = document.getElementById('viewerStage');
+  const viewerMain = document.querySelector('.viewer-main');
+  const vPlatform = document.getElementById('vPlatform');
+  const vTaskId = document.getElementById('vTaskId');
+  const vPos = document.getElementById('vPos');
+  const vTitle = document.getElementById('vTitle');
+  const vShareUrl = document.getElementById('vShareUrl');
+  const vIndex = document.getElementById('viewerIndex');
+  const vBadBadge = document.getElementById('viewerBadBadge');
+  const vGoodBadge = document.getElementById('viewerGoodBadge');
+  const btnPrev = document.getElementById('viewerPrev');
+  const btnNext = document.getElementById('viewerNext');
+  const btnClose = document.getElementById('viewerClose');
+  const backTopBtn = document.getElementById('backTopBtn');
+  const vMarkBtn = document.getElementById('viewerMarkBtn');
+
+  const MARK_STORE_KEY = 'gallery_marks_' + window.location.pathname;
+  const badSet = new Set();
+  const goodSet = new Set();
+  let flatList = [];
+  let currentIdx = 0;
+  let scale = 1;
+  let tx = 0, ty = 0;
+  let fitScale = 1;
+  let dragging = false;
+  let dragStartX = 0, dragStartY = 0, dragBaseX = 0, dragBaseY = 0;
+  let currentMediaType = 'image';
+
+  function saveMarks() {
+    try { localStorage.setItem(MARK_STORE_KEY, JSON.stringify({ bad: Array.from(badSet), good: Array.from(goodSet) })); } catch (_) {}
+  }
+
+  function loadMarks() {
+    try {
+      const raw = localStorage.getItem(MARK_STORE_KEY);
+      if (!raw) return;
+      const parsed = JSON.parse(raw);
+      (parsed?.bad || []).forEach(k => badSet.add(String(k)));
+      (parsed?.good || []).forEach(k => goodSet.add(String(k)));
+      goodSet.forEach(k => badSet.delete(k));
+    } catch (_) {}
+  }
+
+  function applyTransform() {
+    vImg.style.transform = `translate(${tx}px, ${ty}px) scale(${scale})`;
+  }
+
+  function fitImageToViewer() {
+    const vw = viewerStage.clientWidth;
+    const vh = viewerStage.clientHeight;
+    const iw = vImg.naturalWidth || 0;
+    const ih = vImg.naturalHeight || 0;
+    if (!vw || !vh || !iw || !ih) return;
+    vImg.style.width = `${iw}px`;
+    vImg.style.height = `${ih}px`;
+    fitScale = Math.min(vw / iw, vh / ih, 1);
+    scale = fitScale;
+    tx = (vw - iw * scale) / 2;
+    ty = (vh - ih * scale) / 2;
+    viewerMain.classList.remove('dragging');
+    applyTransform();
+  }
+
+  function syncMarks() {
+    document.querySelectorAll('.mark-btn').forEach(btn => {
+      const key = btn.dataset.markKey || '';
+      const isBad = badSet.has(key);
+      const isGood = goodSet.has(key);
+      btn.classList.toggle('bad', isBad);
+      btn.classList.toggle('good', isGood);
+      btn.textContent = isBad ? '✕' : (isGood ? '✓' : '×');
+      btn.title = isBad ? '已标记不符合（点击取消）' : (isGood ? '已标记符合' : '标记为不符合');
+    });
+    const key = flatList[currentIdx]?.markKey || '';
+    const isBad = badSet.has(key);
+    const isGood = goodSet.has(key);
+    vMarkBtn.classList.toggle('bad', isBad);
+    vMarkBtn.textContent = isBad ? '已标记不符合（点击取消）' : '标记为不符合';
+    vBadBadge.classList.toggle('show', isBad);
+    vGoodBadge.classList.toggle('show', isGood);
+  }
+
+  function renderViewer() {
+    const item = flatList[currentIdx];
+    if (!item) return;
+    currentMediaType = item.mediaType || 'image';
+    if (currentMediaType === 'video') {
+      vImg.style.display = 'none';
+      vVideo.style.display = 'block';
+      vVideo.src = item.src;
+      vVideo.load();
+      vVideo.currentTime = 0;
+      vVideo.play().catch(err => { console.warn('Video play failed:', err.message, 'src:', vVideo.src); });
+    } else {
+      vVideo.pause();
+      vVideo.removeAttribute('src');
+      vVideo.load();
+      vVideo.style.display = 'none';
+      vImg.style.display = 'block';
+      vImg.src = item.src;
+      if (vImg.complete && vImg.naturalWidth > 0) fitImageToViewer();
+      else vImg.onload = () => fitImageToViewer();
+    }
+    vPlatform.textContent = item.platform || '';
+    vTaskId.textContent = item.taskId || '';
+    vPos.textContent = `${currentIdx + 1} / ${flatList.length}`;
+    vTitle.textContent = item.title || '';
+    vShareUrl.textContent = item.shareUrl || '-';
+    vShareUrl.href = item.shareUrl || '#';
+    vIndex.textContent = `${currentIdx + 1} / ${flatList.length}（方向键切换，Space 视频暂停/图片下一张，Enter 符合，Backspace 不符合，Esc 关闭）`;
+    syncMarks();
+  }
+
+  function openViewer(startIdx) {
+    currentIdx = Math.max(0, Math.min(startIdx || 0, flatList.length - 1));
+    if (!flatList.length) return;
+    mask.classList.add('show');
+    mask.setAttribute('aria-hidden', 'false');
+    document.body.style.overflow = 'hidden';
+    requestAnimationFrame(() => renderViewer());
+  }
+
+  function closeViewer() {
+    vVideo.pause();
+    mask.classList.remove('show');
+    mask.setAttribute('aria-hidden', 'true');
+    document.body.style.overflow = '';
+    dragging = false;
+  }
+
+  function prev() { if (flatList.length) { currentIdx = (currentIdx - 1 + flatList.length) % flatList.length; renderViewer(); } }
+  function next() { if (flatList.length) { currentIdx = (currentIdx + 1) % flatList.length; renderViewer(); } }
+
+  document.querySelectorAll('.mark-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      e.preventDefault();
+      const key = btn.dataset.markKey || '';
+      if (!key) return;
+      if (badSet.has(key)) badSet.delete(key);
+      else { badSet.add(key); goodSet.delete(key); }
+      saveMarks();
+      syncMarks();
+    });
+  });
+
+  function buildFlatList() {
+    flatList = [];
+    document.querySelectorAll('.thumb-btn').forEach(item => {
+      const mediaType = item.dataset.mediaType || 'image';
+      const src = item.dataset.viewerSrc || '';
+      const shareUrl = item.dataset.shareUrl || '';
+      const rowEl = item.closest('.row');
+      if (!src) return;
+      flatList.push({
+        src,
+        mediaType,
+        platform: item.dataset.platform || '',
+        taskId: rowEl?.dataset.taskId || '',
+        title: item.dataset.title || '',
+        shareUrl,
+        markKey: item.dataset.markKey || '',
+        rowSource: rowEl?.dataset.sourceFile || '',
+      });
+    });
+  }
+
+  document.querySelectorAll('.thumb-btn').forEach((item, i) => {
+    item.addEventListener('click', (e) => {
+      e.preventDefault();
+      const idx = flatList.findIndex(x => x.markKey === item.dataset.markKey);
+      openViewer(idx >= 0 ? idx : i);
+    });
+  });
+
+  vMarkBtn.addEventListener('click', () => {
+    const key = flatList[currentIdx]?.markKey || '';
+    if (!key) return;
+    if (badSet.has(key)) badSet.delete(key);
+    else { badSet.add(key); goodSet.delete(key); }
+    saveMarks();
+    syncMarks();
+  });
+
+  btnPrev.addEventListener('click', prev);
+  btnNext.addEventListener('click', next);
+  btnClose.addEventListener('click', closeViewer);
+  mask.addEventListener('click', (e) => { if (e.target === mask) closeViewer(); });
+
+  document.addEventListener('keydown', (e) => {
+    if (!mask.classList.contains('show')) return;
+    if (e.key === 'Escape') closeViewer();
+    else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') prev();
+    else if (e.key === 'ArrowRight' || e.key === 'ArrowDown') next();
+    else if (e.code === 'Space') {
+      e.preventDefault();
+      if (currentMediaType === 'video') { if (vVideo.paused) vVideo.play().catch(() => {}); else vVideo.pause(); }
+      else { next(); }
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      const key = flatList[currentIdx]?.markKey || '';
+      if (!key) return;
+      if (goodSet.has(key)) goodSet.delete(key);
+      else { goodSet.add(key); badSet.delete(key); }
+      saveMarks();
+      syncMarks();
+    } else if (e.key === 'Backspace') {
+      e.preventDefault();
+      const key = flatList[currentIdx]?.markKey || '';
+      if (!key) return;
+      if (badSet.has(key)) badSet.delete(key);
+      else { badSet.add(key); goodSet.delete(key); }
+      saveMarks();
+      syncMarks();
+    }
+  });
+
+  viewerMain.addEventListener('wheel', (e) => {
+    if (!mask.classList.contains('show') || currentMediaType !== 'image') return;
+    e.preventDefault();
+    const oldScale = scale || 1;
+    const factor = e.deltaY > 0 ? 0.92 : 1.08;
+    const nextScale = Math.max(fitScale * 0.3, Math.min(6, scale * factor));
+    const newScale = Number(nextScale.toFixed(4));
+    const rect = vImg.getBoundingClientRect();
+    const ratio = newScale / oldScale;
+    tx += (e.clientX - rect.left) * (1 - ratio);
+    ty += (e.clientY - rect.top) * (1 - ratio);
+    scale = newScale;
+    applyTransform();
+  }, { passive: false });
+
+  vImg.addEventListener('mousedown', (e) => {
+    if (!mask.classList.contains('show') || currentMediaType !== 'image') return;
+    dragging = true;
+    dragStartX = e.clientX;
+    dragStartY = e.clientY;
+    dragBaseX = tx;
+    dragBaseY = ty;
+    viewerMain.classList.add('dragging');
+    e.preventDefault();
+  });
+
+  window.addEventListener('mousemove', (e) => {
+    if (!dragging) return;
+    tx = dragBaseX + (e.clientX - dragStartX);
+    ty = dragBaseY + (e.clientY - dragStartY);
+    applyTransform();
+  });
+
+  window.addEventListener('mouseup', () => {
+    if (!dragging) return;
+    dragging = false;
+    viewerMain.classList.remove('dragging');
+  });
+
+  window.addEventListener('resize', () => { if (!mask.classList.contains('show')) return; fitImageToViewer(); });
+
+  backTopBtn.addEventListener('click', () => window.scrollTo({ top: 0, behavior: 'smooth' }));
+  window.addEventListener('scroll', () => { const y = window.scrollY || document.documentElement.scrollTop || 0; backTopBtn.classList.toggle('show', y > 280); }, { passive: true });
+
+  // Submit row
+  document.querySelectorAll('.submit-row-btn').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const sourceFile = btn.dataset.sourceFile || '';
+      if (!sourceFile) return;
+      if (!btn.classList.contains('armed') && !btn.classList.contains('submitted')) {
+        btn.classList.add('armed');
+        btn.textContent = '提交';
+        return;
+      }
+      if (btn.classList.contains('submitted')) return;
+      btn.disabled = true;
+      const oldText = btn.textContent;
+      btn.textContent = '提交中...';
+      try {
+        const rowEl = btn.closest('.row');
+        const mediaMarks = {};
+        if (rowEl) {
+          rowEl.querySelectorAll('.thumb-btn').forEach(thumb => {
+            const mediaUrl = thumb.dataset.originalUrl || thumb.dataset.url || '';
+            const key = thumb.dataset.markKey || '';
+            if (!mediaUrl || !key) return;
+            let label = '';
+            if (badSet.has(key)) label = '不符合';
+            else if (goodSet.has(key)) label = '符合';
+            mediaMarks[mediaUrl] = label;
+          });
+        }
+        let resp = await fetch('/api/submit-row', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ source_file: sourceFile, media_marks: mediaMarks }),
+        });
+        if (resp.status === 404) {
+          resp = await fetch('/api/submit_row', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ source_file: sourceFile, media_marks: mediaMarks }),
+          });
+        }
+        const data = await resp.json();
+        if (!resp.ok || !data?.ok) throw new Error(data?.detail || '提交失败');
+        btn.textContent = '已提交';
+        btn.classList.add('submitted');
+        if (rowEl) {
+          rowEl.style.maxHeight = rowEl.offsetHeight + 'px';
+          requestAnimationFrame(() => rowEl.classList.add('removing'));
+          setTimeout(() => {
+            rowEl.remove();
+            buildFlatList();
+            if (!flatList.length) window.location.reload();
+          }, 320);
+        }
+      } catch (err) {
+        btn.disabled = false;
+        btn.classList.add('armed');
+        btn.textContent = oldText || '提交';
+        window.alert(`提交失败：${err?.message || err}`);
+      }
+    });
+  });
+
+  loadMarks();
+  buildFlatList();
+  syncMarks();
+})();
+</script>
+</body>
+</html>
