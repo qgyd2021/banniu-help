@@ -14,6 +14,16 @@
 
     .filter-summary { font-size: 12px; color: #8c8c8c; width: 100%; margin-top: 2px; }
     .row.filter-hidden { display: none !important; }
+    .row.paginate-hidden { display: none !important; }
+    #paginateSentinel { height: 1px; }
+    #paginateLoading {
+      display: none;
+      text-align: center;
+      color: #8c8c8c;
+      font-size: 12px;
+      padding: 12px 0 4px;
+    }
+    #paginateLoading.show { display: block; }
     .search-empty-hint {
       display: none;
       background: #fff;
@@ -383,7 +393,7 @@
                   data-index="{{ loop.index0 }}"
                   data-title="{{ row.title or '' }}"
                   data-mark-key="{{ row.platform }}::{{ row.task_id }}::{{ img_url }}">
-                  <img src="{{ image_stream_url(img_url, row.platform, row.share_url or '', loop.index0) }}" loading="lazy" alt="image" />
+                  <img data-src="{{ image_stream_url(img_url, row.platform, row.share_url or '', loop.index0) }}" loading="lazy" alt="image" />
                 </button>
               </div>
               {% endfor %}
@@ -477,6 +487,8 @@
     </section>
 
     {% endfor %}
+    <div id="paginateLoading">加载更多…</div>
+    <div id="paginateSentinel" aria-hidden="true"></div>
   </div>
   {% else %}
   <div class="empty-state">
@@ -675,7 +687,7 @@
 
   function buildFlatList() {
     flatList = [];
-    document.querySelectorAll('.row:not(.filter-hidden) .thumb-btn').forEach(item => {
+    document.querySelectorAll('.row:not(.filter-hidden):not(.paginate-hidden) .thumb-btn').forEach(item => {
       const mediaType = item.dataset.mediaType || 'image';
       const src = item.dataset.viewerSrc || '';
       const shareUrl = item.dataset.shareUrl || '';
@@ -827,6 +839,40 @@
     }
   }
 
+  const PAGE_SIZE = 10;
+  let paginateLimit = PAGE_SIZE;
+
+  function revealImagesInRow(rowEl) {
+    if (!rowEl) return;
+    rowEl.querySelectorAll('img[data-src]').forEach((img) => {
+      const src = img.dataset.src;
+      if (src) {
+        img.src = src;
+        img.removeAttribute('data-src');
+      }
+    });
+  }
+
+  function applyPagination() {
+    const rows = document.querySelectorAll('#rowsContainer .row:not(.filter-hidden)');
+    let shown = 0;
+    rows.forEach((row) => {
+      if (shown < paginateLimit) {
+        row.classList.remove('paginate-hidden');
+        revealImagesInRow(row);
+        shown += 1;
+      } else {
+        row.classList.add('paginate-hidden');
+      }
+    });
+    const loadingEl = document.getElementById('paginateLoading');
+    if (loadingEl) loadingEl.classList.toggle('show', shown < rows.length);
+  }
+
+  function resetPagination() {
+    paginateLimit = PAGE_SIZE;
+  }
+
   function applyAllFilters() {
     const q = (searchKeyword?.value || '').trim().toLowerCase();
     const productModel = (filterProductModel?.value || '').trim();
@@ -864,13 +910,15 @@
     if (startTs !== null || endTs !== null) parts.push('已限创建时间');
     if (searchSummary) searchSummary.textContent = parts.join(' · ');
     if (searchEmptyHint) searchEmptyHint.classList.toggle('show', total > 0 && visible === 0);
+    applyPagination();
     syncViewerAfterFilter();
   }
 
-  filterSearchBtn?.addEventListener('click', applyAllFilters);
+  filterSearchBtn?.addEventListener('click', () => { resetPagination(); applyAllFilters(); });
   searchKeyword?.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') {
       e.preventDefault();
+      resetPagination();
       applyAllFilters();
     }
   });
@@ -883,8 +931,25 @@
     if (filterReviewStatus) filterReviewStatus.value = '';
     if (filterTaskStatus) filterTaskStatus.value = '';
     if (filterFinalApproved) filterFinalApproved.value = '';
+    resetPagination();
     applyAllFilters();
   });
+
+  const paginateSentinel = document.getElementById('paginateSentinel');
+  if (paginateSentinel && 'IntersectionObserver' in window) {
+    const io = new IntersectionObserver((entries) => {
+      entries.forEach((entry) => {
+        if (!entry.isIntersecting) return;
+        const total = document.querySelectorAll('#rowsContainer .row:not(.filter-hidden)').length;
+        if (paginateLimit < total) {
+          paginateLimit += PAGE_SIZE;
+          applyPagination();
+          syncViewerAfterFilter();
+        }
+      });
+    }, { rootMargin: '300px 0px' });
+    io.observe(paginateSentinel);
+  }
 
   function syncFinalButtons(rowEl) {
     if (!rowEl) return;
