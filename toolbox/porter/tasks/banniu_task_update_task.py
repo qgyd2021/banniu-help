@@ -14,7 +14,7 @@ logger = logging.getLogger("toolbox")
 
 from project_settings import environment, project_path
 from toolbox.porter.tasks.base_task import BaseTask, global_file_lock_dict
-from toolbox.banniu.banniu_client import AsyncBanNiuClient
+from toolbox.banniu.restful.banniu_client import AsyncBanNiuRestfulClient
 from toolbox.banniu.form.column_list import ColumnListForm
 from toolbox.banniu.form.task_list import TaskListForm
 
@@ -64,7 +64,7 @@ class BanNiuTaskUpdateTask(BaseTask):
         app_key = environment.get(key_of_app_key)
         app_secret = environment.get(key_of_app_secret)
         access_token = environment.get(key_of_access_token)
-        self.banniu_client = AsyncBanNiuClient(
+        self.banniu_client = AsyncBanNiuRestfulClient(
             app_key=app_key,
             app_secret=app_secret,
             access_token=access_token,

@@ -6,9 +6,10 @@
 from __future__ import annotations
 
 import argparse
+import asyncio
 from datetime import datetime, timedelta
 import json
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union
 
 from toolbox.banniu.form.column_list import ColumnListForm
 
@@ -93,17 +94,18 @@ def get_args():
     return args
 
 
-def main():
+async def main():
     """
-    使用班牛 client 拉取 task.list，实例化 TaskListForm，便于本地调试 rows / task_id 提取等。
-    运行：python -m toolbox.banniu.form.task_list
+    异步版调试入口::
+
+        python -c "import asyncio; from toolbox.banniu.form.task_list import main_async; asyncio.run(main_async())"
     """
     args = get_args()
 
     from project_settings import environment
-    from toolbox.banniu.banniu_client import BanNiuClient
+    from toolbox.banniu.restful.banniu_client import AsyncBanNiuRestfulClient
 
-    client = BanNiuClient(
+    client = AsyncBanNiuRestfulClient(
         app_key=environment.get("BANNIU_APP_KEY"),
         app_secret=environment.get("BANNIU_APP_SECRET"),
         access_token=environment.get("BANNIU_ACCESS_TOKEN"),
@@ -112,7 +114,7 @@ def main():
     now_dt = datetime.now()
     start_dt = now_dt - timedelta(days=max(0, int(args.days)))
 
-    js = client.task_list(
+    js = await client.task_list(
         project_id=str(args.project_id),
         page_size=int(args.page_size),
         page_num=int(args.page_num),
@@ -123,7 +125,7 @@ def main():
     form = TaskListForm(raw_rows=raw_rows)
     print(form)
 
-    column_js = client.column_list(project_id=str(args.project_id))
+    column_js = await client.column_list(project_id=str(args.project_id))
     column_form = ColumnListForm(rows=column_js["response"]["map"]["result"])
     pretty_rows = form.get_pretty_rows(column_form=column_form)
     print("first_pretty_row:", json.dumps(pretty_rows[0], ensure_ascii=False, indent=4))
@@ -131,4 +133,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())

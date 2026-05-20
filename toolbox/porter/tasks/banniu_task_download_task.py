@@ -13,7 +13,7 @@ logger = logging.getLogger("toolbox")
 
 from project_settings import environment, project_path
 from toolbox.porter.tasks.base_task import BaseTask, global_file_lock_dict
-from toolbox.banniu.banniu_client import AsyncBanNiuClient
+from toolbox.banniu.sdk.banniu_client import BanNiuClient, AsyncBanNiuClient
 from toolbox.banniu.form.column_list import ColumnListForm
 from toolbox.banniu.form.task_list import TaskListForm
 from toolbox.asyncio.cacheout import async_cache_decorator
@@ -167,13 +167,23 @@ class BanNiuTaskDownloadTask(BaseTask):
         return form
 
     async def _fetch_task_rows_by_window(self, star_created: str, end_created: str) -> List[dict]:
-        page_size = int(getattr(self, "page_size", 50))
-        task_status = getattr(self, "task_status", None)
-        condition_column = getattr(self, "condition_column", None)
+        page_size = 50
+        # 任务状态; task_status: 0, 等处理; 1, 已完成; 2, 处理中; 3, 暂停中; 4, 已关闭
+        task_status = 2 # 处理中
+        # task_status = None
+        condition_column = [
+            {
+                "字段": "审核状态",
+                "字段类型": "文本类型",
+                "搜索类型": "等于",
+                "搜索内容": "待审核",
+                # "搜索内容": "未通过",
+            }
+        ]
         all_rows: List[dict] = []
         page_num = 1
         while True:
-            js = await self.banniu_client.task_list(
+            js = await self.banniu_client.task_list_pretty(
                 project_id=self.project_id,
                 star_created=star_created,
                 end_created=end_created,
@@ -182,7 +192,7 @@ class BanNiuTaskDownloadTask(BaseTask):
                 task_status=task_status,
                 condition_column=condition_column,
             )
-            rows = (((js or {}).get("response") or {}).get("map") or {}).get("result") or []
+            rows = js["response"]["map"]["result"]
             form = TaskListForm(raw_rows=rows if isinstance(rows, list) else [])
             page_rows = form.raw_rows
             if not page_rows:
@@ -268,11 +278,11 @@ def main():
     log.setup_size_rotating(log_directory=log_directory)
 
     task = BanNiuTaskDownloadTask(
-        project_id="37728",
+        project_id="39369",
         check_interval=60,
-        output_dir="temp/banniu_37728/step_1_banniu_task_download/tasks",
-        last_fetch_tasks="temp/banniu_37728/step_1_banniu_task_download/last_fetch_tasks.json",
-        last_fetch_time_txt="temp/banniu_37728/step_1_banniu_task_download/last_fetch_time.txt",
+        output_dir="temp/banniu_39369/step_1_banniu_task_download/tasks",
+        last_fetch_tasks="temp/banniu_39369/step_1_banniu_task_download/last_fetch_tasks.json",
+        last_fetch_time_txt="temp/banniu_39369/step_1_banniu_task_download/last_fetch_time.txt",
     )
     # 示例只执行一轮拉取，便于本地查看结果文件。
     asyncio.run(task.do_task())

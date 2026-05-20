@@ -12,6 +12,62 @@
     .header h1 { margin: 0 0 6px; font-size: 22px; font-weight: 600; }
     .header p { margin: 0; opacity: 0.85; font-size: 13px; }
 
+    .filter-summary { font-size: 12px; color: #8c8c8c; width: 100%; margin-top: 2px; }
+    .row.filter-hidden { display: none !important; }
+    .search-empty-hint {
+      display: none;
+      background: #fff;
+      border-radius: 12px;
+      padding: 28px;
+      text-align: center;
+      color: #8c8c8c;
+      font-size: 14px;
+      margin-bottom: 12px;
+    }
+    .search-empty-hint.show { display: block; }
+
+    .filter-bar {
+      background: #fff;
+      border-radius: 12px;
+      box-shadow: 0 1px 4px rgba(0,0,0,.08);
+      padding: 14px 16px;
+      margin-bottom: 14px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px 16px;
+      align-items: flex-end;
+    }
+    .filter-bar .filter-title { width: 100%; font-size: 13px; font-weight: 600; color: #1d2129; }
+    .filter-bar .filter-group { display: flex; flex-direction: column; gap: 4px; min-width: 140px; }
+    .filter-bar .filter-group.keyword { min-width: 220px; flex: 1 1 240px; }
+    .filter-bar .filter-group.range { min-width: 180px; }
+    .filter-bar label { font-size: 12px; color: #606266; }
+    .filter-bar select,
+    .filter-bar input[type="datetime-local"],
+    .filter-bar input[type="search"] {
+      height: 32px;
+      border: 1px solid #d9d9d9;
+      border-radius: 6px;
+      padding: 0 8px;
+      font-size: 13px;
+      color: #1d2129;
+      background: #fff;
+    }
+    .filter-bar .filter-actions { display: flex; gap: 8px; margin-left: auto; }
+    .filter-bar .filter-btn {
+      height: 32px;
+      padding: 0 14px;
+      border: 1px solid #d9d9d9;
+      border-radius: 6px;
+      background: #fff;
+      font-size: 13px;
+      cursor: pointer;
+      color: #333;
+    }
+    .filter-bar .filter-btn:hover { background: #f5f5f5; }
+    .filter-bar .filter-btn.primary { border-color: #1677ff; background: #1677ff; color: #fff; }
+    .filter-bar .filter-btn.primary:hover { background: #0958d9; }
+
     .rows { display: flex; flex-direction: column; gap: 12px; }
     .row {
       background: #fff;
@@ -54,7 +110,13 @@
     .platform-dewu { background: #1a1a1a; color: #fff; }
     .platform-xiaoheihe { background: #5ccc8c; color: #fff; }
 
-    .task-id { font-size: 11px; color: #8c8c8c; margin-bottom: 6px; }
+    .task-meta-row { display: flex; align-items: center; flex-wrap: wrap; gap: 10px 14px; margin-top: 6px; }
+    .task-id { font-size: 11px; color: #8c8c8c; }
+    .task-meta-inline { font-size: 11px; color: #8c8c8c; }
+    .task-final-inline { font-size: 11px; color: #8c8c8c; }
+    .task-final-inline.pass { color: #389e0d; }
+    .task-final-inline.reject { color: #cf1322; }
+    .task-final-inline.pending { color: #8c8c8c; }
     .section-label { font-size: 11px; color: #8c8c8c; margin-bottom: 6px; text-transform: uppercase; letter-spacing: .5px; }
 
     .title-text { font-size: 14px; font-weight: 600; color: #1d2129; line-height: 1.5; word-break: break-word; }
@@ -93,18 +155,42 @@
     .mark-btn.bad { border-color: #ff4d4f; background: #ff4d4f; color: #fff; box-shadow: 0 2px 10px rgba(255,77,79,.45); }
     .mark-btn.good { border-color: #52c41a; background: #52c41a; color: #fff; box-shadow: 0 2px 10px rgba(82,196,26,.45); }
 
-    .submit-row-btn { margin-top: 10px; width: 100%; height: 34px; border: 1px solid #d9d9d9; border-radius: 8px; background: #fff; color: #333; font-size: 13px; cursor: pointer; }
-    .post-side .submit-row-btn { margin-top: 10px; }
-    .submit-row-btn:hover { background: #f5f5f5; }
-    .submit-row-btn.armed { border-color: #1677ff; background: #1677ff; color: #fff; }
-    .submit-row-btn.armed:hover { background: #0958d9; }
-    .submit-row-btn:disabled { background: #8fb8ff; cursor: not-allowed; }
-
-    .score-list { margin-top: 10px; padding-top: 10px; border-top: 1px dashed #e8e8e8; display: flex; flex-direction: column; gap: 6px; }
-    .score-item { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 12px; color: #595959; }
-    .score-item .k { color: #606266; }
-    .score-item .v { font-weight: 700; color: #1f2329; }
-    .post-side .link { margin-top: 10px; font-size: 12px; color: #666; word-break: break-all; }
+    .post-side .side-label { font-size: 12px; color: #606266; margin: 10px 0 6px; font-weight: 600; }
+    .post-side .link { margin-top: 4px; font-size: 12px; color: #666; word-break: break-all; }
+    .final-status { font-size: 12px; padding: 6px 10px; border-radius: 6px; background: #f5f5f5; color: #595959; margin-bottom: 4px; }
+    .final-status.pass { background: #f6ffed; color: #389e0d; }
+    .final-status.reject { background: #fff2f0; color: #cf1322; }
+    .final-status.pending { background: #fafafa; color: #8c8c8c; }
+    .final-decision-row { display: flex; gap: 8px; margin-top: 4px; }
+    .final-btn {
+      flex: 1; height: 34px; border: 1px solid #d9d9d9; border-radius: 8px;
+      background: #fff; color: #333; font-size: 13px; cursor: pointer;
+    }
+    .final-btn:hover { background: #f5f5f5; }
+    .final-btn.pass.active { border-color: #52c41a; background: #52c41a; color: #fff; }
+    .final-btn.reject.active { border-color: #ff4d4f; background: #ff4d4f; color: #fff; }
+    .review-reason {
+      width: 100%; min-height: 72px; margin-top: 4px; padding: 8px 10px;
+      border: 1px solid #d9d9d9; border-radius: 8px; font-size: 12px; line-height: 1.5;
+      resize: vertical; font-family: inherit; color: #1d2129;
+    }
+    .review-panel {
+      margin-top: 10px; border: 1px solid #eee; border-radius: 8px; background: #fafafa;
+      font-size: 12px; line-height: 1.55; color: #303133;
+    }
+    .review-panel summary { cursor: pointer; padding: 8px 10px; font-weight: 600; color: #1d2129; list-style: none; }
+    .review-panel summary::-webkit-details-marker { display: none; }
+    .review-panel .review-panel-body { padding: 0 10px 10px; border-top: 1px solid #eee; }
+    .review-block { margin-top: 8px; }
+    .review-block-title { font-weight: 600; color: #606266; margin-bottom: 4px; }
+    .review-kv { margin: 2px 0; word-break: break-word; }
+    .review-kv .k { color: #909399; margin-right: 4px; }
+    .save-media-btn {
+      margin-top: 12px; width: 100%; height: 36px; border: 0; border-radius: 8px;
+      background: #1677ff; color: #fff; font-size: 13px; font-weight: 600; cursor: pointer;
+    }
+    .save-media-btn:hover { background: #0958d9; }
+    .save-media-btn:disabled { background: #8fb8ff; cursor: not-allowed; }
 
     .back-top { position: fixed; right: 70px; bottom: 70px; width: 92px; height: 92px; border: 0; border-radius: 999px; background: rgba(17,23,34,.85); color: #fff; font-size: 40px; cursor: pointer; display: none; align-items: center; justify-content: center; z-index: 999; box-shadow: 0 4px 14px rgba(0,0,0,.25); }
     .back-top.show { display: flex; }
@@ -164,18 +250,105 @@
 <div class="wrap">
   <div class="header">
     <h1>搬牛 - 帖子综合审核</h1>
-    <p>帖子完整信息展示（标题、描述、作者、互动数据、图片、视频），支持审核提交</p>
+    <p>标注图片/视频后可保存归档；可同时选择审核通过/不通过并填写备注</p>
   </div>
 
   {% if rows %}
-  <div class="rows">
+  <div class="filter-bar" id="filterBar">
+    <div class="filter-title">筛选与搜索</div>
+    <div class="filter-group keyword">
+      <label for="searchKeyword">关键词</label>
+      <input type="search" id="searchKeyword" placeholder="task_id、标题、正文、作者、分享链接…" autocomplete="off" />
+    </div>
+    <div class="filter-group">
+      <label for="filterProductModel">产品型号</label>
+      <select id="filterProductModel">
+        <option value="">全部</option>
+        {% for v in product_models %}
+        <option value="{{ v }}">{{ v }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="filter-group range">
+      <label for="filterCreatedStart">创建时间起</label>
+      <input type="datetime-local" id="filterCreatedStart" />
+    </div>
+    <div class="filter-group range">
+      <label for="filterCreatedEnd">创建时间止</label>
+      <input type="datetime-local" id="filterCreatedEnd" />
+    </div>
+    <div class="filter-group">
+      <label for="filterReviewStatus">审核状态</label>
+      <select id="filterReviewStatus">
+        <option value="">全部</option>
+        {% for v in review_statuses %}
+        <option value="{{ v }}">{{ v }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="filter-group">
+      <label for="filterTaskStatus">任务状态</label>
+      <select id="filterTaskStatus">
+        <option value="">全部</option>
+        {% for v in task_statuses %}
+        <option value="{{ v }}">{{ v }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="filter-group">
+      <label for="filterFinalApproved">终审（post_review_final）</label>
+      <select id="filterFinalApproved">
+        <option value="">全部</option>
+        <option value="true">已通过</option>
+        <option value="false">已驳回</option>
+        <option value="none">未决策</option>
+      </select>
+    </div>
+    <div class="filter-actions">
+      <button type="button" class="filter-btn primary" id="filterSearchBtn">搜索</button>
+      <button type="button" class="filter-btn" id="filterResetBtn">重置</button>
+    </div>
+    <div class="filter-summary" id="searchSummary"></div>
+  </div>
+
+  <div class="search-empty-hint" id="searchEmptyHint">没有匹配的帖子，请调整搜索或筛选条件</div>
+
+  <div class="rows" id="rowsContainer">
     {% for row in rows %}
-    <section class="row" data-source-file="{{ row.source_file }}" data-platform="{{ row.platform }}" data-task-id="{{ row.task_id }}">
+    {% set rf = row.review_final or {} %}
+    {% set rt = row.review_text or {} %}
+    {% set search_blob = [
+      row.task_id, row.platform, row.title, row.desc,
+      row.author_nickname, row.author_uid, row.share_url,
+      rt.emotion_label, rt.emotion_desc,
+      (rt.tags_match or [])|join(' '), (rt.tags_miss or [])|join(' ')
+    ]|join(' ') %}
+    <section class="row"
+      data-source-file="{{ row.source_file }}"
+      data-platform="{{ row.platform }}"
+      data-task-id="{{ row.task_id }}"
+      data-search-text="{{ search_blob | lower }}"
+      data-product-model="{{ row.product_model }}"
+      data-created-at="{{ row.created_at }}"
+      data-review-status="{{ row.review_status }}"
+      data-task-status="{{ row.task_status }}"
+      data-filter-final-approved="{{ row.final_approved_key }}"
+      data-final-approved="{% if rf.approved is sameas true %}true{% elif rf.approved is sameas false %}false{% else %}{% endif %}">
       <div class="left-panel">
         <div class="post-main">
           <div class="post-main-left">
             <span class="platform-badge platform-{{ row.platform }}">{{ {'douyin':'抖音','xiaohongshu':'小红书','bilibili':'B站','kuaishou':'快手','weibo':'微博','dewu':'得物','xiaoheihe':'小黑盒'}.get(row.platform, row.platform) }}</span>
-            <div class="task-id" style="margin-top: 6px;">task_id: {{ row.task_id }}</div>
+            <div class="task-meta-row">
+              <span class="task-id">task_id: {{ row.task_id }}</span>
+              <span class="task-meta-inline">产品型号：{{ row.product_model or '-' }}</span>
+              <span class="task-meta-inline">创建时间：{{ row.created_at or '-' }}</span>
+              <span class="task-meta-inline">任务状态：{{ row.task_status or '-' }}</span>
+              <span class="task-meta-inline">流程状态：{{ row.flow_status or '-' }}</span>
+              <span class="task-meta-inline">审核状态：{{ row.review_status or '-' }}</span>
+              <span class="task-final-inline {% if row.final_approved_key == 'true' %}pass{% elif row.final_approved_key == 'false' %}reject{% else %}pending{% endif %}">
+                当前终审：{% if row.final_approved_key == 'true' %}已通过{% elif row.final_approved_key == 'false' %}未通过{% else %}未决策{% endif %}
+              </span>
+            </div>
             <div class="info-line"><span class="label">标题：</span><span class="value">{{ row.title or '-' }}</span></div>
             <div class="info-line"><span class="label">正文：</span><span class="value">{{ row.desc or '-' }}</span></div>
             <div class="info-line">
@@ -250,19 +423,56 @@
       </div>
 
       <div class="post-side">
-        <button class="submit-row-btn" type="button" data-source-file="{{ row.source_file }}">未标记默认为"符合"</button>
-
-        {% if row.share_url %}
-        <div class="link">分享链接：<a href="{{ row.share_url }}" target="_blank" rel="noopener noreferrer">{{ row.share_url[:60] }}{% if row.share_url|length > 60 %}...{% endif %}</a></div>
-        {% endif %}
-
-        <div class="score-list">
-          <div class="score-item"><span class="k">文本评分</span><span class="v">{{ row.text_score if row.text_score is not none else '-' }}</span></div>
-          <div class="score-item"><span class="k">图片评分</span><span class="v">{{ row.image_score if row.image_score is not none else '-' }}</span></div>
-          <div class="score-item"><span class="k">视频评分</span><span class="v">{{ row.video_score if row.video_score is not none else '-' }}</span></div>
+        <div class="side-label">人工终审</div>
+        <div class="final-decision-row">
+          <button type="button" class="final-btn pass" data-approved="true">审核通过</button>
+          <button type="button" class="final-btn reject" data-approved="false">审核不通过</button>
         </div>
+
+        <div class="side-label">备注（回复用户）</div>
+        <textarea class="review-reason" placeholder="填写审核意见或驳回原因…">{{ rf.reply_to_user or '' }}</textarea>
+
+        <details class="review-panel">
+          <summary>审核信息（自动）</summary>
+          <div class="review-panel-body">
+            {% set rt = row.review_text or {} %}
+            {% set rd = row.review_duplicate or {} %}
+            {% set ri = row.review_image or {} %}
+            {% set rv = row.review_video or {} %}
+            <div class="review-block">
+              <div class="review-block-title">重复发帖</div>
+              {% if rd.duplicate_task_ids %}
+              <div class="review-kv"><span class="k">重复 task_id：</span>{{ rd.duplicate_task_ids | join(', ') }}</div>
+              {% else %}
+              <div class="review-kv">无重复</div>
+              {% endif %}
+            </div>
+            <div class="review-block">
+              <div class="review-block-title">文本</div>
+              <div class="review-kv"><span class="k">情绪：</span>{{ rt.emotion_label or '-' }}（{{ rt.emotion_desc or '-' }}）</div>
+              <div class="review-kv"><span class="k">标题/正文长度：</span>{{ rt.title_length }} / {{ rt.desc_length }}</div>
+              <div class="review-kv"><span class="k">标签匹配：</span>{{ (rt.tags_match or []) | join(', ') or '-' }}</div>
+              <div class="review-kv"><span class="k">标签缺失：</span>{{ (rt.tags_miss or []) | join(', ') or '-' }}</div>
+            </div>
+            <div class="review-block">
+              <div class="review-block-title">图片</div>
+              <div class="review-kv"><span class="k">数量/勾/叉：</span>{{ ri.total_count }} / {{ ri.check_count }} / {{ ri.cross_count }}</div>
+            </div>
+            <div class="review-block">
+              <div class="review-block-title">视频</div>
+              <div class="review-kv"><span class="k">数量/勾/叉：</span>{{ rv.total_count }} / {{ rv.check_count }} / {{ rv.cross_count }}</div>
+            </div>
+          </div>
+        </details>
+
+        <button class="save-media-btn" type="button" data-source-file="{{ row.source_file }}">保存图片/视频标注</button>
+        {% if row.share_url %}
+        <div class="link" style="margin-top: 10px;">分享链接：<a href="{{ row.share_url }}" target="_blank" rel="noopener noreferrer">{{ row.share_url[:60] }}{% if row.share_url|length > 60 %}...{% endif %}</a></div>
+        {% endif %}
+        <div style="font-size: 11px; color: #8c8c8c; margin-top: 6px; line-height: 1.45;">未标记的媒体默认为「符合」；保存后归档到下一步</div>
       </div>
     </section>
+
     {% endfor %}
   </div>
   {% else %}
@@ -455,7 +665,7 @@
 
   function buildFlatList() {
     flatList = [];
-    document.querySelectorAll('.thumb-btn').forEach(item => {
+    document.querySelectorAll('.row:not(.filter-hidden) .thumb-btn').forEach(item => {
       const mediaType = item.dataset.mediaType || 'image';
       const src = item.dataset.viewerSrc || '';
       const shareUrl = item.dataset.shareUrl || '';
@@ -568,70 +778,199 @@
   backTopBtn.addEventListener('click', () => window.scrollTo({ top: 0, behavior: 'smooth' }));
   window.addEventListener('scroll', () => { const y = window.scrollY || document.documentElement.scrollTop || 0; backTopBtn.classList.toggle('show', y > 280); }, { passive: true });
 
-  // Submit row
-  document.querySelectorAll('.submit-row-btn').forEach(btn => {
+  const searchKeyword = document.getElementById('searchKeyword');
+  const searchSummary = document.getElementById('searchSummary');
+  const searchEmptyHint = document.getElementById('searchEmptyHint');
+  const filterSearchBtn = document.getElementById('filterSearchBtn');
+  const filterProductModel = document.getElementById('filterProductModel');
+  const filterCreatedStart = document.getElementById('filterCreatedStart');
+  const filterCreatedEnd = document.getElementById('filterCreatedEnd');
+  const filterReviewStatus = document.getElementById('filterReviewStatus');
+  const filterTaskStatus = document.getElementById('filterTaskStatus');
+  const filterFinalApproved = document.getElementById('filterFinalApproved');
+  const filterResetBtn = document.getElementById('filterResetBtn');
+
+  function parseCreatedAt(s) {
+    const raw = String(s || '').trim();
+    if (!raw) return null;
+    const normalized = raw.includes('T') ? raw : raw.replace(' ', 'T');
+    const t = Date.parse(normalized);
+    return Number.isNaN(t) ? null : t;
+  }
+
+  function parseDatetimeLocalInput(v) {
+    const raw = String(v || '').trim();
+    if (!raw) return null;
+    const t = Date.parse(raw);
+    return Number.isNaN(t) ? null : t;
+  }
+
+  function syncViewerAfterFilter() {
+    buildFlatList();
+    if (!mask.classList.contains('show')) return;
+    const cur = flatList[currentIdx];
+    if (!cur || !flatList.length) closeViewer();
+    else {
+      const idx = flatList.findIndex((x) => x.markKey === cur.markKey);
+      if (idx < 0) closeViewer();
+      else if (idx !== currentIdx) openViewer(idx);
+    }
+  }
+
+  function applyAllFilters() {
+    const q = (searchKeyword?.value || '').trim().toLowerCase();
+    const productModel = (filterProductModel?.value || '').trim();
+    const reviewStatus = (filterReviewStatus?.value || '').trim();
+    const taskStatus = (filterTaskStatus?.value || '').trim();
+    const finalApproved = (filterFinalApproved?.value || '').trim();
+    const startTs = parseDatetimeLocalInput(filterCreatedStart?.value || '');
+    const endTs = parseDatetimeLocalInput(filterCreatedEnd?.value || '');
+
+    const rowEls = document.querySelectorAll('#rowsContainer .row');
+    let visible = 0;
+    rowEls.forEach((row) => {
+      let ok = true;
+      if (q && !(row.dataset.searchText || '').toLowerCase().includes(q)) ok = false;
+      if (productModel && (row.dataset.productModel || '') !== productModel) ok = false;
+      if (reviewStatus && (row.dataset.reviewStatus || '') !== reviewStatus) ok = false;
+      if (taskStatus && (row.dataset.taskStatus || '') !== taskStatus) ok = false;
+      if (finalApproved && (row.dataset.filterFinalApproved || 'none') !== finalApproved) ok = false;
+
+      const createdTs = parseCreatedAt(row.dataset.createdAt || '');
+      if (startTs !== null && (createdTs === null || createdTs < startTs)) ok = false;
+      if (endTs !== null && (createdTs === null || createdTs > endTs)) ok = false;
+
+      row.classList.toggle('filter-hidden', !ok);
+      if (ok) visible += 1;
+    });
+
+    const total = rowEls.length;
+    const parts = [`显示 ${visible} / ${total} 条`];
+    if (q) parts.push(`关键词「${q}」`);
+    if (productModel) parts.push(`型号=${productModel}`);
+    if (reviewStatus) parts.push(`审核=${reviewStatus}`);
+    if (taskStatus) parts.push(`任务=${taskStatus}`);
+    if (finalApproved) parts.push(`终审=${finalApproved}`);
+    if (startTs !== null || endTs !== null) parts.push('已限创建时间');
+    if (searchSummary) searchSummary.textContent = parts.join(' · ');
+    if (searchEmptyHint) searchEmptyHint.classList.toggle('show', total > 0 && visible === 0);
+    syncViewerAfterFilter();
+  }
+
+  filterSearchBtn?.addEventListener('click', applyAllFilters);
+  searchKeyword?.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      applyAllFilters();
+    }
+  });
+
+  filterResetBtn?.addEventListener('click', () => {
+    if (searchKeyword) searchKeyword.value = '';
+    if (filterProductModel) filterProductModel.value = '';
+    if (filterCreatedStart) filterCreatedStart.value = '';
+    if (filterCreatedEnd) filterCreatedEnd.value = '';
+    if (filterReviewStatus) filterReviewStatus.value = '';
+    if (filterTaskStatus) filterTaskStatus.value = '';
+    if (filterFinalApproved) filterFinalApproved.value = '';
+    applyAllFilters();
+  });
+
+  function syncFinalButtons(rowEl) {
+    if (!rowEl) return;
+    const val = rowEl.dataset.finalApproved || '';
+    rowEl.querySelectorAll('.final-btn').forEach((b) => {
+      b.classList.toggle('active', (b.dataset.approved || '') === val);
+    });
+  }
+
+  document.querySelectorAll('.row').forEach((rowEl) => syncFinalButtons(rowEl));
+
+  document.querySelectorAll('.final-btn').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const rowEl = btn.closest('.row');
+      if (!rowEl) return;
+      const val = btn.dataset.approved || '';
+      rowEl.dataset.finalApproved = rowEl.dataset.finalApproved === val ? '' : val;
+      syncFinalButtons(rowEl);
+    });
+  });
+
+  function collectMediaMarks(rowEl) {
+    const mediaMarks = {};
+    if (!rowEl) return mediaMarks;
+    rowEl.querySelectorAll('.thumb-btn').forEach((thumb) => {
+      const mediaUrl = thumb.dataset.originalUrl || thumb.dataset.url || '';
+      const key = thumb.dataset.markKey || '';
+      if (!mediaUrl || !key) return;
+      let label = '';
+      if (badSet.has(key)) label = '不符合';
+      else if (goodSet.has(key)) label = '符合';
+      mediaMarks[mediaUrl] = label;
+    });
+    return mediaMarks;
+  }
+
+  async function postSubmitRow(sourceFile, body) {
+    let resp = await fetch('/api/submit-row', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    if (resp.status === 404) {
+      resp = await fetch('/api/submit_row', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+    }
+    const data = await resp.json();
+    if (!resp.ok || !data?.ok) {
+      const detail = typeof data?.detail === 'string' ? data.detail : JSON.stringify(data?.detail || data);
+      throw new Error(detail || '提交失败');
+    }
+    return data;
+  }
+
+  document.querySelectorAll('.save-media-btn').forEach((btn) => {
     btn.addEventListener('click', async () => {
       const sourceFile = btn.dataset.sourceFile || '';
-      if (!sourceFile) return;
-      if (!btn.classList.contains('armed') && !btn.classList.contains('submitted')) {
-        btn.classList.add('armed');
-        btn.textContent = '提交';
-        return;
-      }
-      if (btn.classList.contains('submitted')) return;
-      btn.disabled = true;
+      if (!sourceFile || btn.disabled) return;
+      const rowEl = btn.closest('.row');
       const oldText = btn.textContent;
-      btn.textContent = '提交中...';
+      btn.disabled = true;
+      btn.textContent = '保存中...';
       try {
-        const rowEl = btn.closest('.row');
-        const mediaMarks = {};
-        if (rowEl) {
-          rowEl.querySelectorAll('.thumb-btn').forEach(thumb => {
-            const mediaUrl = thumb.dataset.originalUrl || thumb.dataset.url || '';
-            const key = thumb.dataset.markKey || '';
-            if (!mediaUrl || !key) return;
-            let label = '';
-            if (badSet.has(key)) label = '不符合';
-            else if (goodSet.has(key)) label = '符合';
-            mediaMarks[mediaUrl] = label;
-          });
+        const body = { source_file: sourceFile, media_marks: collectMediaMarks(rowEl) };
+        const finalVal = rowEl?.dataset.finalApproved || '';
+        if (finalVal === 'true') {
+          body.approved = true;
+          body.reason = (rowEl.querySelector('.review-reason')?.value || '').trim();
+        } else if (finalVal === 'false') {
+          body.approved = false;
+          body.reason = (rowEl.querySelector('.review-reason')?.value || '').trim();
         }
-        let resp = await fetch('/api/submit-row', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ source_file: sourceFile, media_marks: mediaMarks }),
-        });
-        if (resp.status === 404) {
-          resp = await fetch('/api/submit_row', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ source_file: sourceFile, media_marks: mediaMarks }),
-          });
-        }
-        const data = await resp.json();
-        if (!resp.ok || !data?.ok) throw new Error(data?.detail || '提交失败');
-        btn.textContent = '已提交';
-        btn.classList.add('submitted');
+        await postSubmitRow(sourceFile, body);
+        btn.textContent = '已保存';
         if (rowEl) {
           rowEl.style.maxHeight = rowEl.offsetHeight + 'px';
           requestAnimationFrame(() => rowEl.classList.add('removing'));
           setTimeout(() => {
             rowEl.remove();
-            buildFlatList();
-            if (!flatList.length) window.location.reload();
+            applyAllFilters();
+            if (!flatList.length && !document.querySelector('#rowsContainer .row')) window.location.reload();
           }, 320);
         }
       } catch (err) {
         btn.disabled = false;
-        btn.classList.add('armed');
-        btn.textContent = oldText || '提交';
-        window.alert(`提交失败：${err?.message || err}`);
+        btn.textContent = oldText || '保存图片/视频标注';
+        window.alert(`保存失败：${err?.message || err}`);
       }
     });
   });
 
   loadMarks();
-  buildFlatList();
+  applyAllFilters();
   syncMarks();
 })();
 </script>

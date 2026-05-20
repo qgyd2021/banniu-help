@@ -4,14 +4,16 @@ from __future__ import annotations
 
 from typing import Any, Dict, Optional, Union
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 ScalarValue = Union[str, int, float, bool]
 
 
 class BanniuTaskFormatted(BaseModel):
-    model_config = ConfigDict(extra="allow", populate_by_name=True)
+    # model_config = ConfigDict(extra="allow", populate_by_name=True)
+    model_config = ConfigDict(extra="allow")  # 允许额外字段，但不保存到模型
+    # model_config = ConfigDict(extra="forbid")  # 禁止额外字段
 
     task_id_int: Optional[int] = Field(default=None, alias="taskId(int)")
     task_id_str: Optional[str] = Field(default=None, alias="taskId(str)")
@@ -40,15 +42,15 @@ class BanniuTaskFormatted(BaseModel):
     activity_desc: Optional[str] = Field(default=None, alias="活动简介")
 
     # 自动审核分数（注意：你后续已声明不作为新评分来源，这里仅建模存档）
-    text_review_score_auto: Optional[ScalarValue] = Field(default=None, alias="文字审核（自动）")
-    image_review_score_auto: Optional[ScalarValue] = Field(default=None, alias="图片审核（自动）")
-    video_review_score_auto: Optional[ScalarValue] = Field(default=None, alias="视频审核（自动）")
-    duplicate_review_score_auto: Optional[ScalarValue] = Field(default=None, alias="重复发贴（自动）")
-
-    text_review_reason_auto: Optional[str] = Field(default=None, alias="文字审核原因（自动）")
-    image_review_reason_auto: Optional[str] = Field(default=None, alias="图片审核原因（自动）")
-    video_review_reason_auto: Optional[str] = Field(default=None, alias="视频审核原因（自动）")
-    duplicate_review_reason_auto: Optional[str] = Field(default=None, alias="重复发贴原因（自动）")
+    # text_review_score_auto: Optional[ScalarValue] = Field(default=None, alias="文字审核（自动）")
+    # image_review_score_auto: Optional[ScalarValue] = Field(default=None, alias="图片审核（自动）")
+    # video_review_score_auto: Optional[ScalarValue] = Field(default=None, alias="视频审核（自动）")
+    # duplicate_review_score_auto: Optional[ScalarValue] = Field(default=None, alias="重复发贴（自动）")
+    #
+    # text_review_reason_auto: Optional[str] = Field(default=None, alias="文字审核原因（自动）")
+    # image_review_reason_auto: Optional[str] = Field(default=None, alias="图片审核原因（自动）")
+    # video_review_reason_auto: Optional[str] = Field(default=None, alias="视频审核原因（自动）")
+    # duplicate_review_reason_auto: Optional[str] = Field(default=None, alias="重复发贴原因（自动）")
 
     # 流程/时效
     flow_status: Optional[str] = Field(default=None, alias="流程状态")
@@ -60,6 +62,19 @@ class BanniuTaskFormatted(BaseModel):
     wdt_push: Optional[str] = Field(default=None, alias="是否推单旺店通")
     review_sla: Optional[str] = Field(default=None, alias="审核时效")
     push_sla: Optional[str] = Field(default=None, alias="推单时效")
+
+    @model_validator(mode="before")
+    @classmethod
+    def resolve_share_text(cls, values: dict):
+        # 尝试从两个可能的键中取值，优先取“内容链接”
+        if "内容链接" in values:
+            values["share_text"] = values["内容链接"]
+        elif "晒单内容链接" in values:
+            values["share_text"] = values["晒单内容链接"]
+        # 可选：删除原始字段避免污染（如果开启了 extra="forbid" 则必须删除）
+        # values.pop("内容链接", None)
+        # values.pop("晒单内容链接", None)
+        return values
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "BanniuTaskFormatted":

@@ -1,108 +1,40 @@
 #!/usr/bin/python3
 # -*- coding: utf-8 -*-
 import asyncio
+import copy
 from collections import defaultdict
-from datetime import datetime
 import json
 import logging
-import os
-from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Set, Tuple
 
 import aiofiles
 
 logger = logging.getLogger("toolbox")
 
-from project_settings import project_path
 from toolbox.porter.tasks.base_task import BaseTask, TaskJsonUtils, global_file_lock_dict
+from toolbox.porter.entity.post_meta import PostMeta
+from toolbox.porter.entity.post_review import PostReview
 
 
 @BaseTask.register("post_review_duplicate_review")
 class PostReviewDuplicateReviewTask(BaseTask, TaskJsonUtils):
-    """
-    从每个帖子的 post_meta 中抽取作者 ID，去重后追加写入指定文件（一行一个 ID）；
-    每轮 do_task 开始时从该文件加载历史 ID，再处理目录中的 task json 并流转。
-    """
-
     def __init__(
         self,
         check_interval: int,
         platform_to_dirs: List[Tuple[str, str, str]],
         post_duplicate_file: str,
-        platform_meta_config: Optional[Dict[str, Dict[str, object]]] = None,
         **kwargs,
     ):
         super().__init__(flag=f"[{self.__class__.__name__}]", check_interval=check_interval)
-
         self.platform_to_dir = list()
         for platform, src, dst in platform_to_dirs:
             p = str(platform).strip().lower()
-            if not os.path.isabs(src):
-                src = project_path / src
-            else:
-                src = Path(src)
-            if not os.path.isabs(dst):
-                dst = project_path / dst
-            else:
-                dst = Path(dst)
+            src = self.resolve_project_path(src)
+            dst = self.resolve_project_path(dst)
             self.platform_to_dir.append((p, src, dst))
 
-        if not os.path.isabs(post_duplicate_file):
-            self.post_duplicate_file_path = project_path / post_duplicate_file
-        else:
-            self.post_duplicate_file_path = Path(post_duplicate_file)
-
-        self.platform_meta_config = platform_meta_config or {}
-
-        self.author_id_to_task_ids: Dict[str, List[str]] = None
-
-    @staticmethod
-    def get_nested(obj: object, dotted_key: str) -> object:
-        cur: object = obj
-        for part in str(dotted_key or "").split("."):
-            if not part:
-                continue
-            if not isinstance(cur, dict):
-                return None
-            cur = cur.get(part)
-        return cur
-
-    @staticmethod
-    def get_author_id_path(conf: Dict[str, object]) -> List[str]:
-        paths = conf.get("author_id_paths")
-        if isinstance(paths, list) and paths:
-            return [str(p).strip() for p in paths if str(p).strip()]
-        author_id = conf.get("author_id_path")
-
-        result = "user.user_id"
-        if author_id is not None:
-            result = str(author_id).strip()
-        return result
-
-    def get_author_id_from_payload(
-        self, payload: dict, platform: str, conf: Dict[str, object]
-    ) -> Tuple[str, str]:
-        meta_list_key = str(conf.get("meta_list_key") or "").strip()
-        if not meta_list_key:
-            return None, "missing_meta_list_key"
-        rows = payload.get(meta_list_key)
-        if not isinstance(rows, list) or not rows:
-            return None, "empty_meta_list"
-
-        author_id_path = self.get_author_id_path(conf)
-        row = rows[0]
-        if not isinstance(row, dict):
-            return None, None
-        post_meta = row.get("post_meta")
-        if not isinstance(post_meta, dict):
-            post_meta = {}
-
-        author_id = self.get_nested(post_meta, author_id_path)
-        if author_id is not None:
-            author_id = str(author_id).strip()
-            if author_id:
-                return author_id, None
-        return author_id, None
+        self.post_duplicate_file = self.resolve_project_path(post_duplicate_file)
+        self.author_id_to_task_ids: Dict[str, Set[str]] = None
 
     async def append_new_author_ids(self, platform: str, author_id: str, task_id: str):
         if author_id is None or str(author_id) == 0:
@@ -110,7 +42,7 @@ class PostReviewDuplicateReviewTask(BaseTask, TaskJsonUtils):
         row = {"platform": platform, "author_id": author_id, "task_id": task_id}
         row = json.dumps(row, ensure_ascii=False)
 
-        path = self.post_duplicate_file_path
+        path = self.post_duplicate_file
         path.parent.mkdir(parents=True, exist_ok=True)
 
         lock = global_file_lock_dict[path.as_posix()]
@@ -119,16 +51,17 @@ class PostReviewDuplicateReviewTask(BaseTask, TaskJsonUtils):
                 await f.write(f"{row}\n")
 
     async def load_author_id_to_task_ids(self) -> Dict[str, set]:
-        path = self.post_duplicate_file_path
+        result = defaultdict(set)
+
+        path = self.post_duplicate_file
         lock = global_file_lock_dict[path.as_posix()]
         if not path.exists():
-            return list()
+            return result
 
         async with lock:
             async with aiofiles.open(path.as_posix(), "r", encoding="utf-8") as f:
                 raw = await f.read()
 
-        result = defaultdict(set)
         for row in raw.splitlines():
             row = json.loads(row)
             platform = row["platform"]
@@ -143,26 +76,25 @@ class PostReviewDuplicateReviewTask(BaseTask, TaskJsonUtils):
 
         return result
 
-    def check_duplicate(self, platform: str, author_id: str, task_id: str):
+    def check_duplicate(self, platform: str, author_id: str, task_id: str) -> Set[str]:
         key = f"{platform}_{author_id}"
         value: set = self.author_id_to_task_ids[key]
+        value = copy.deepcopy(value)
         value.discard(task_id)
+        self.author_id_to_task_ids[key].add(task_id)
         return value
 
     async def do_task(self):
         if not self.platform_to_dir:
             logger.info(f"{self.flag}platform_to_dirs 为空，跳过")
             return
-        if not str(self.post_duplicate_file_path):
+        if not str(self.post_duplicate_file):
             logger.info(f"{self.flag}author_ids_file 无效，跳过")
             return
 
         if self.author_id_to_task_ids is None:
             self.author_id_to_task_ids = await self.load_author_id_to_task_ids()
 
-        moved = 0
-        processed = 0
-        scanned = 0
         for platform, source_dir, target_dir in self.platform_to_dir:
             if not source_dir.exists():
                 logger.info(f"{self.flag}源目录不存在，跳过: platform={platform}, source={source_dir.as_posix()}")
@@ -171,62 +103,20 @@ class PostReviewDuplicateReviewTask(BaseTask, TaskJsonUtils):
 
             files = self.pick_task_files(source_dir, recursive=False)
             for src in files:
-                scanned += 1
                 payload = await self.load_json_file(src)
-                if payload is None:
-                    continue
-
                 task_id = payload["task_id"]
-                conf = self.platform_meta_config.get(platform)
-                if not isinstance(conf, dict):
-                    logger.info(f"{self.flag}缺少平台配置，跳过: platform={platform}, file={src.name}")
-                    continue
-
-                author_id, err = self.get_author_id_from_payload(payload, platform, conf)
-                if author_id is None:
-                    logger.info(f"{self.flag}未提取到 author_id，跳过: {src.name}, platform={platform}")
-                    continue
-                if err == "missing_meta_list_key":
-                    logger.info(f"{self.flag}缺少 meta_list_key，跳过: {src.name}, platform={platform}")
-                    continue
-                if err == "empty_meta_list":
-                    logger.info(f"{self.flag}meta 列表为空，跳过: {src.name}, platform={platform}")
-                    continue
+                post_meta = PostMeta.from_dict(payload["post_meta"])
+                platform = post_meta.platform
+                author_id = post_meta.user_id
 
                 await self.append_new_author_ids(platform, author_id, task_id)
-
                 task_ids: set = self.check_duplicate(platform, author_id, task_id)
-
-                duplicate = len(task_ids) > 0
-                label = "是" if duplicate else "否"
-                score = 0 if duplicate else 100
-                desc = f"发贴作者存在重复，与之重复的工单号：{';'.join(task_ids)}" if duplicate else ""
-
-                result = {
-                    "platform": platform,
-                    "author_id": author_id,
-                    "task_ids": list(task_ids),
-                    "label": label,
-                    "score": score,
-                    "desc": desc,
-                    "post_duplicate_file_path": self.post_duplicate_file_path.as_posix(),
-                    "meta_list_key": str(conf.get("meta_list_key") or ""),
-                    "reviewed_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                }
-                payload["post_review_duplicate_review"] = result
-                payload["post_review_duplicate_review_status"] = "done"
+                post_review = PostReview.from_dict(payload.get("post_review", dict()))
+                post_review.review_duplicate.duplicate_task_ids = list(task_ids)
 
                 dst = target_dir / src.name
-                final = self.safe_move(src, dst)
-                await self.write_json(final, payload)
-                processed += 1
-                moved += 1
-                logger.info(
-                    f"{self.flag}作者 ID 收集并流转: {src.name} -> {final.as_posix()}, "
-                    f"platform={platform}"
-                )
-
-        logger.info(f"{self.flag}本轮扫描 {scanned} 个文件，处理 {processed} 个，移动 {moved} 个。")
+                self.safe_move(src, dst)
+                await self.append_kv_to_task_file(dst, kv={"post_review": post_review.to_dict()})
 
 
 def main():
@@ -237,17 +127,16 @@ def main():
 
     task = PostReviewDuplicateReviewTask(
         check_interval=60,
-        post_duplicate_file="temp/banniu_37728/post_duplicatev.jsonl",
+        post_duplicate_file="temp/banniu_37728_v2/post_duplicatev.jsonl",
         platform_to_dirs=[
-            (
-                "xiaohongshu",
-                "temp/banniu_37728/step_12_post_review_duplicate_review/xiaohongshu",
-                "temp/banniu_37728/step_13_banniu_task_duplicate_update/xiaohongshu",
-            ),
+            ["xiaohongshu", "temp/banniu_37728_v2/step_3_xiaohongshu_share_media_download/tasks", "temp/banniu_37728_v2/step_4_post_review_duplicate_review/xiaohongshu"],
+            ["dewu", "temp/banniu_37728_v2/step_3_dewu_share_media_download/tasks", "temp/banniu_37728_v2/step_4_post_review_duplicate_review/dewu"],
+            ["douyin", "temp/banniu_37728_v2/step_3_douyin_share_media_download/tasks", "temp/banniu_37728_v2/step_4_post_review_duplicate_review/douyin"],
+            ["kuaishou", "temp/banniu_37728_v2/step_3_kuaishou_share_media_download/tasks", "temp/banniu_37728_v2/step_4_post_review_duplicate_review/kuaishou"],
+            ["bilibili", "temp/banniu_37728_v2/step_3_bilibili_share_media_download/tasks", "temp/banniu_37728_v2/step_4_post_review_duplicate_review/bilibili"],
+            ["xiaoheihe", "temp/banniu_37728_v2/step_3_xiaoheihe_share_media_download/tasks", "temp/banniu_37728_v2/step_4_post_review_duplicate_review/xiaoheihe"],
+            ["weibo", "temp/banniu_37728_v2/step_3_weibo_share_media_download/tasks", "temp/banniu_37728_v2/step_4_post_review_duplicate_review/weibo"]
         ],
-        platform_meta_config={
-            "xiaohongshu": {"meta_list_key": "xiaohongshu_post_meta_list", "author_id_path": "user.user_id"},
-        },
     )
     asyncio.run(task.do_task())
 

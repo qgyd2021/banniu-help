@@ -250,7 +250,7 @@ def main():
     client = ShareMediaDownload()
 
     share_text = """
-游戏办... https://v.douyin.com/-IIk4WzIyzg/ odN:/ 02/13 L@J.VY
+7.12 复制打开抖音，看看【H的图文作品】# 迈从 # 迈从A7V2 新尝试，大手玩家大喜  https://v.douyin.com/OJsMk7lQIJM/ Bgo:/ :5pm d@A.GI 05/20
 """
     post_meta = client.get_post_meta_by_share_text(share_text)
     print("post_meta:")

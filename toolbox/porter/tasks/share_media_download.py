@@ -2,12 +2,12 @@
 # -*- coding: utf-8 -*-
 import asyncio
 import logging
+import traceback
 
 from toolbox.bilibili.media.share_media_download import ShareMediaDownload as BilibiliShareMediaDownload
 from toolbox.dewu.media.share_media_download import ShareMediaDownload as DewuShareMediaDownload
 from toolbox.douyin.media.share_media_download import ShareMediaDownload as DouyinShareMediaDownload
 from toolbox.kuaishou.media.share_media_download import ShareMediaDownload as KuaishouShareMediaDownload
-from toolbox.porter.entity.banniu_task import BanniuTaskFormatted
 from toolbox.porter.entity.post_meta import PostMeta
 from toolbox.porter.tasks.base_task import BaseTask, TaskJsonUtils
 from toolbox.weibo.media.share_media_download import ShareMediaDownload as WeiboShareMediaDownload
@@ -24,11 +24,14 @@ class ShareMediaDownloadByBilibiliTask(BaseTask, TaskJsonUtils):
         check_interval: int,
         source_dir: str,
         output_dir: str = "bilibili_share_media_download/tasks",
+        share_post_url_field: str = "晒单内容链接",
         **kwargs,
     ):
         super().__init__(flag=f"[{self.__class__.__name__}]", check_interval=check_interval)
         self.source_dir = self.resolve_project_path(source_dir)
         self.output_dir = self.resolve_project_path(output_dir)
+        self.share_post_url_field = share_post_url_field
+
         self.share_media_client = BilibiliShareMediaDownload()
 
     async def do_task(self):
@@ -44,8 +47,7 @@ class ShareMediaDownloadByBilibiliTask(BaseTask, TaskJsonUtils):
         for task_file in files:
             payload = await self.load_json_file(task_file)
 
-            task_formatted = BanniuTaskFormatted.from_dict(payload["task_formatted"])
-            share_text = task_formatted.share_text
+            share_text = payload["task_formatted"][self.share_post_url_field]
 
             try:
                 info = self.share_media_client.classify_share_link(share_text)
@@ -58,8 +60,8 @@ class ShareMediaDownloadByBilibiliTask(BaseTask, TaskJsonUtils):
                     post_meta = self.share_media_client.opus.get_opus_meta_by_url(entry_url)
                     post_meta["share_url"] = entry_url
                     post_meta = PostMeta.from_dict_by_bilibili_opus(post_meta)
-            except AssertionError:
-                logger.info(f"{self.flag}任务拉取全失败，保留原位置等待下次重试: {task_file.as_posix()}")
+            except AssertionError as error:
+                logger.info(f"{self.flag}任务拉取全失败，保留原位置等待下次重试: {task_file.as_posix()}，error： {str(error)}, traceback: {traceback.format_exc()}")
                 continue
             except Exception:
                 logger.info(f"{self.flag}任务拉取全失败，保留原位置等待下次重试: {task_file.as_posix()}")
@@ -79,11 +81,14 @@ class ShareMediaDownloadByDewuTask(BaseTask, TaskJsonUtils):
         check_interval: int,
         source_dir: str,
         output_dir: str = "dewu_share_media_download/tasks",
+        share_post_url_field: str = "晒单内容链接",
         **kwargs,
     ):
         super().__init__(flag=f"[{self.__class__.__name__}]", check_interval=check_interval)
         self.source_dir = self.resolve_project_path(source_dir)
         self.output_dir = self.resolve_project_path(output_dir)
+        self.share_post_url_field = share_post_url_field
+
         self.share_media_client = DewuShareMediaDownload()
 
     async def do_task(self):
@@ -99,16 +104,15 @@ class ShareMediaDownloadByDewuTask(BaseTask, TaskJsonUtils):
         for task_file in files:
             payload = await self.load_json_file(task_file)
 
-            task_formatted = BanniuTaskFormatted.from_dict(payload["task_formatted"])
-            share_text = task_formatted.share_text
+            share_text = payload["task_formatted"][self.share_post_url_field]
 
             try:
                 share_url = self.share_media_client.get_share_url_by_share_text(share_text)
                 post_meta = await asyncio.to_thread(self.share_media_client.get_post_meta_by_share_url, share_url)
                 post_meta["share_url"] = share_url
                 post_meta = PostMeta.from_dict_by_dewu(post_meta)
-            except AssertionError:
-                logger.info(f"{self.flag}任务拉取全失败，保留原位置等待下次重试: {task_file.as_posix()}")
+            except AssertionError as error:
+                logger.info(f"{self.flag}任务拉取全失败，保留原位置等待下次重试: {task_file.as_posix()}，error： {str(error)}, traceback: {traceback.format_exc()}")
                 continue
             except Exception:
                 logger.info(f"{self.flag}任务拉取全失败，保留原位置等待下次重试: {task_file.as_posix()}")
@@ -128,11 +132,14 @@ class ShareMediaDownloadByDouyinTask(BaseTask, TaskJsonUtils):
         check_interval: int,
         source_dir: str,
         output_dir: str = "douyin_share_media_download/tasks",
+        share_post_url_field: str = "晒单内容链接",
         **kwargs,
     ):
         super().__init__(flag=f"[{self.__class__.__name__}]", check_interval=check_interval)
         self.source_dir = self.resolve_project_path(source_dir)
         self.output_dir = self.resolve_project_path(output_dir)
+        self.share_post_url_field = share_post_url_field
+
         self.share_media_client = DouyinShareMediaDownload()
 
     async def do_task(self):
@@ -148,16 +155,15 @@ class ShareMediaDownloadByDouyinTask(BaseTask, TaskJsonUtils):
         for task_file in files:
             payload = await self.load_json_file(task_file)
 
-            task_formatted = BanniuTaskFormatted.from_dict(payload["task_formatted"])
-            share_text = task_formatted.share_text
+            share_text = payload["task_formatted"][self.share_post_url_field]
 
             try:
                 share_url = self.share_media_client.get_share_url_by_share_text(share_text)
                 post_meta = await asyncio.to_thread(self.share_media_client.get_post_meta_by_share_url, share_url)
                 post_meta["share_url"] = share_url
                 post_meta = PostMeta.from_dict_by_douyin(post_meta)
-            except AssertionError:
-                logger.info(f"{self.flag}任务拉取全失败，保留原位置等待下次重试: {task_file.as_posix()}")
+            except AssertionError as error:
+                logger.info(f"{self.flag}任务拉取全失败，保留原位置等待下次重试: {task_file.as_posix()}，error： {str(error)}, traceback: {traceback.format_exc()}")
                 continue
             except Exception:
                 logger.info(f"{self.flag}任务拉取全失败，保留原位置等待下次重试: {task_file.as_posix()}")
@@ -177,13 +183,14 @@ class ShareMediaDownloadByXiaoHongShuTask(BaseTask, TaskJsonUtils):
         check_interval: int,
         source_dir: str,
         output_dir: str = "xiaohongshu_share_media_download/tasks",
+        share_post_url_field: str = "晒单内容链接",
         **kwargs,
     ):
         super().__init__(flag=f"[{self.__class__.__name__}]", check_interval=check_interval)
         self.source_dir = self.resolve_project_path(source_dir)
         self.output_dir = self.resolve_project_path(output_dir)
-        if XiaoHongShuShareMediaDownload is None:
-            raise ModuleNotFoundError("xiaohongshu ShareMediaDownload unavailable (missing optional dependencies)")
+        self.share_post_url_field = share_post_url_field
+
         self.share_media_client = XiaoHongShuShareMediaDownload()
 
     async def do_task(self):
@@ -199,16 +206,15 @@ class ShareMediaDownloadByXiaoHongShuTask(BaseTask, TaskJsonUtils):
         for task_file in files:
             payload = await self.load_json_file(task_file)
 
-            task_formatted = BanniuTaskFormatted.from_dict(payload["task_formatted"])
-            share_text = task_formatted.share_text
+            share_text = payload["task_formatted"][self.share_post_url_field]
 
             try:
                 share_url = self.share_media_client.get_share_url_by_share_text(share_text)
                 post_meta = await asyncio.to_thread(self.share_media_client.get_post_meta_by_share_url, share_url)
                 post_meta["share_url"] = share_url
                 post_meta = PostMeta.from_dict_by_xiaohongshu(post_meta)
-            except AssertionError:
-                logger.info(f"{self.flag}任务拉取全失败，保留原位置等待下次重试: {task_file.as_posix()}")
+            except AssertionError as error:
+                logger.info(f"{self.flag}任务拉取全失败，保留原位置等待下次重试: {task_file.as_posix()}，error： {str(error)}, traceback: {traceback.format_exc()}")
                 continue
             except Exception:
                 logger.info(f"{self.flag}任务拉取全失败，保留原位置等待下次重试: {task_file.as_posix()}")
@@ -228,11 +234,14 @@ class ShareMediaDownloadByKuaishouTask(BaseTask, TaskJsonUtils):
         check_interval: int,
         source_dir: str,
         output_dir: str = "kuaishou_share_media_download/tasks",
+        share_post_url_field: str = "晒单内容链接",
         **kwargs,
     ):
         super().__init__(flag=f"[{self.__class__.__name__}]", check_interval=check_interval)
         self.source_dir = self.resolve_project_path(source_dir)
         self.output_dir = self.resolve_project_path(output_dir)
+        self.share_post_url_field = share_post_url_field
+
         self.share_media_client = KuaishouShareMediaDownload()
 
     async def do_task(self):
@@ -248,16 +257,15 @@ class ShareMediaDownloadByKuaishouTask(BaseTask, TaskJsonUtils):
         for task_file in files:
             payload = await self.load_json_file(task_file)
 
-            task_formatted = BanniuTaskFormatted.from_dict(payload["task_formatted"])
-            share_text = task_formatted.share_text
+            share_text = payload["task_formatted"][self.share_post_url_field]
 
             try:
                 share_url = self.share_media_client.get_share_url_by_share_text(share_text)
                 post_meta = await asyncio.to_thread(self.share_media_client.get_post_meta_by_share_url, share_url)
                 post_meta["share_url"] = share_url
                 post_meta = PostMeta.from_dict_by_kuaishou(post_meta)
-            except AssertionError:
-                logger.info(f"{self.flag}任务拉取全失败，保留原位置等待下次重试: {task_file.as_posix()}")
+            except AssertionError as error:
+                logger.info(f"{self.flag}任务拉取全失败，保留原位置等待下次重试: {task_file.as_posix()}，error： {str(error)}, traceback: {traceback.format_exc()}")
                 continue
             except Exception:
                 logger.info(f"{self.flag}任务拉取全失败，保留原位置等待下次重试: {task_file.as_posix()}")
@@ -277,11 +285,14 @@ class ShareMediaDownloadByXiaoHeiHeTask(BaseTask, TaskJsonUtils):
         check_interval: int,
         source_dir: str,
         output_dir: str = "xiaoheihe_share_media_download/tasks",
+        share_post_url_field: str = "晒单内容链接",
         **kwargs,
     ):
         super().__init__(flag=f"[{self.__class__.__name__}]", check_interval=check_interval)
         self.source_dir = self.resolve_project_path(source_dir)
         self.output_dir = self.resolve_project_path(output_dir)
+        self.share_post_url_field = share_post_url_field
+
         self.share_media_client = XiaoHeiHeShareMediaDownload()
 
     async def do_task(self):
@@ -297,16 +308,15 @@ class ShareMediaDownloadByXiaoHeiHeTask(BaseTask, TaskJsonUtils):
         for task_file in files:
             payload = await self.load_json_file(task_file)
 
-            task_formatted = BanniuTaskFormatted.from_dict(payload["task_formatted"])
-            share_text = task_formatted.share_text
+            share_text = payload["task_formatted"][self.share_post_url_field]
 
             try:
                 share_url = self.share_media_client.get_share_url_by_share_text(share_text)
                 post_meta = await asyncio.to_thread(self.share_media_client.get_post_meta_by_share_url, share_url)
                 post_meta["share_url"] = share_url
                 post_meta = PostMeta.from_dict_by_xiaoheihe(post_meta)
-            except AssertionError:
-                logger.info(f"{self.flag}任务拉取全失败，保留原位置等待下次重试: {task_file.as_posix()}")
+            except AssertionError as error:
+                logger.info(f"{self.flag}任务拉取全失败，保留原位置等待下次重试: {task_file.as_posix()}，error： {str(error)}, traceback: {traceback.format_exc()}")
                 continue
             except Exception:
                 logger.info(f"{self.flag}任务拉取全失败，保留原位置等待下次重试: {task_file.as_posix()}")
@@ -326,13 +336,14 @@ class ShareMediaDownloadByWeiboTask(BaseTask, TaskJsonUtils):
         check_interval: int,
         source_dir: str,
         output_dir: str = "weibo_share_media_download/tasks",
+        share_post_url_field: str = "晒单内容链接",
         **kwargs,
     ):
         super().__init__(flag=f"[{self.__class__.__name__}]", check_interval=check_interval)
         self.source_dir = self.resolve_project_path(source_dir)
         self.output_dir = self.resolve_project_path(output_dir)
-        if WeiboShareMediaDownload is None:
-            raise ModuleNotFoundError("weibo ShareMediaDownload unavailable (missing optional dependencies)")
+        self.share_post_url_field = share_post_url_field
+
         self.share_media_client = WeiboShareMediaDownload()
 
     async def do_task(self):
@@ -348,16 +359,15 @@ class ShareMediaDownloadByWeiboTask(BaseTask, TaskJsonUtils):
         for task_file in files:
             payload = await self.load_json_file(task_file)
 
-            task_formatted = BanniuTaskFormatted.from_dict(payload["task_formatted"])
-            share_text = task_formatted.share_text
+            share_text = payload["task_formatted"][self.share_post_url_field]
 
             try:
                 share_url = self.share_media_client.get_share_url_by_share_text(share_text)
                 post_meta = await asyncio.to_thread(self.share_media_client.get_post_meta_by_share_url, share_url)
                 post_meta["share_url"] = share_url
                 post_meta = PostMeta.from_dict_by_weibo(post_meta)
-            except AssertionError:
-                logger.info(f"{self.flag}任务拉取全失败，保留原位置等待下次重试: {task_file.as_posix()}")
+            except AssertionError as error:
+                logger.info(f"{self.flag}任务拉取全失败，保留原位置等待下次重试: {task_file.as_posix()}，error： {str(error)}, traceback: {traceback.format_exc()}")
                 continue
             except Exception:
                 logger.info(f"{self.flag}任务拉取全失败，保留原位置等待下次重试: {task_file.as_posix()}")

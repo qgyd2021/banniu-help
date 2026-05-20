@@ -16,7 +16,10 @@ from pydantic import BaseModel
 from starlette.requests import Request
 
 from project_settings import project_path
-from toolbox.porter.tasks.base_task import BaseTask
+from toolbox.porter.tasks.base_task import BaseTask, TaskJsonUtils
+from toolbox.porter.entity.banniu_task import BanniuTaskFormatted
+from toolbox.porter.entity.post_meta import PostMeta
+from toolbox.porter.entity.post_review import PostReview
 from toolbox.bilibili.utils.fresh_media_url import FreshImageUrl as BilibiliFreshImageUrl
 from toolbox.weibo.utils.fresh_media_url import FreshImageUrl as WeiboFreshImageUrl
 from toolbox.xiaohongshu.utils.fresh_media_url import FreshImageUrl as XiaoHongShuFreshImageUrl
@@ -37,7 +40,7 @@ logger = logging.getLogger("toolbox")
 
 
 @BaseTask.register("post_review_submit_service")
-class PostReviewSubmitServiceTask(BaseTask):
+class PostReviewSubmitServiceTask(BaseTask, TaskJsonUtils):
     """帖子综合信息展示与审核提交服务。
 
     将图片审核、视频审核的流程合并为一个综合审核页面，
@@ -53,18 +56,18 @@ class PostReviewSubmitServiceTask(BaseTask):
         templates_dir: str = "toolbox/porter/tasks/post_review_submit_service_task/templates",
         host: str = "0.0.0.0",
         port: int = 10000,
-        service_registry_dir: str = "temp/service_registry",
+        service_registry_dir: str = "temp/banniu_37728_v2/service_registry",
         service_name: str = "post_review_submit_service",
         service_access_path: str = "",
         service_description: str = "帖子综合审核服务，展示完整帖子信息（标题、描述、作者、互动数据、图片、视频），支持审核提交。",
     ):
         super().__init__(flag=f"[{self.__class__.__name__}]", check_interval=check_interval)
-        self.source_dir = self._resolve_project_path(source_dir)
-        self.target_dir = self._resolve_project_path(target_dir)
-        self.templates_dir = self._resolve_project_path(templates_dir)
+        self.source_dir = self.resolve_project_path(source_dir)
+        self.target_dir = self.resolve_project_path(target_dir)
+        self.templates_dir = self.resolve_project_path(templates_dir)
         self.host = host
         self.port = port
-        self.service_registry_dir = self._resolve_project_path(service_registry_dir)
+        self.service_registry_dir = self.resolve_project_path(service_registry_dir)
         self.service_name = str(service_name or "post_review_submit_service").strip()
         self.service_access_path = str(service_access_path or "").strip()
         self.service_description = str(service_description or "").strip()
@@ -88,24 +91,10 @@ class PostReviewSubmitServiceTask(BaseTask):
             "xiaoheihe": XiaoHeiHeFreshVideoUrl(),
         }
 
-        self.server_info_file = self._register_service_info()
+        self.server_info_file = self.register_service_info()
         self.app = self._build_app()
 
-    @staticmethod
-    def _resolve_project_path(raw_path: str) -> Path:
-        p = Path(raw_path)
-        if p.is_absolute():
-            return p.resolve()
-        return (project_path / p).resolve()
-
-    @staticmethod
-    def _safe_read_json(path: Path) -> Dict[str, Any]:
-        try:
-            return json.loads(path.read_text(encoding="utf-8"))
-        except Exception:
-            return {}
-
-    def _register_service_info(self) -> Path:
+    def register_service_info(self) -> Path:
         registry_dir = self.service_registry_dir
         registry_dir.mkdir(parents=True, exist_ok=True)
         service_dir = registry_dir
@@ -125,132 +114,72 @@ class PostReviewSubmitServiceTask(BaseTask):
         server_file.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
         return server_file
 
-    def _collect_post_rows(self) -> List[Dict[str, Any]]:
-        """收集所有帖子数据，整理成前端需要的结构。"""
+    def collect_post_rows(self) -> List[Dict[str, Any]]:
         if not self.source_dir.exists():
             return []
 
-        def _pick_score(payload_obj: Dict[str, Any], field_key: str) -> Optional[float]:
-            """仅从 post_review_get_*_score.score 取分（不从 task_formatted 回退）。"""
-            raw = payload_obj.get(field_key)
-            if isinstance(raw, dict):
-                # 对于明确旁路/无内容的情况，不展示为 0，统一视为“无分数”。
-                if field_key == "post_review_get_video_score":
-                    status = str(payload_obj.get("post_review_video_review_status") or "")
-                    video_count = raw.get("video_count")
-                    if (isinstance(video_count, int) and video_count <= 0) or status.startswith("bypass") or status.startswith("bypassed"):
-                        return None
-                if field_key == "post_review_get_image_score":
-                    image_count = raw.get("image_count")
-                    if isinstance(image_count, int) and image_count <= 0:
-                        return None
-
-                score = raw.get("score")
-                if isinstance(score, (int, float)):
-                    return float(score)
-                if isinstance(score, str):
-                    try:
-                        return float(score.strip())
-                    except Exception:
-                        pass
-            return None
-
         rows: List[Dict[str, Any]] = []
         for fp in sorted(self.source_dir.rglob("*.json")):
-            payload = self._safe_read_json(fp)
+            with open(fp.as_posix(), "r", encoding="utf-8") as f:
+                payload = json.load(f)
             if not isinstance(payload, dict):
                 continue
 
-            task_id = str(payload.get("task_id") or fp.stem)
             platform = fp.parent.name
 
-            # 提取 task_formatted 中的关键字段
-            task_formatted = payload.get("task_formatted") or {}
-            post_title = str(task_formatted.get("标题") or task_formatted.get("title") or "")
-            post_desc = str(task_formatted.get("描述") or task_formatted.get("desc") or "")
-            author = str(task_formatted.get("创建人") or task_formatted.get("author") or "")
-            product_model = str(task_formatted.get("产品型号") or task_formatted.get("product_model") or "")
-            activity_desc = str(task_formatted.get("活动简介") or task_formatted.get("activity_desc") or "")
+            task_formatted = payload.get("task_formatted")
+            task_formatted = BanniuTaskFormatted.from_dict(task_formatted)
+            post_meta = payload.get("post_meta")
+            post_meta = PostMeta.from_dict(post_meta)
+            post_review = payload.get("post_review")
+            post_review = PostReview.from_dict(post_review)
 
-            text_score = _pick_score(payload, "post_review_get_text_score")
-            image_score = _pick_score(payload, "post_review_get_image_score")
-            video_score = _pick_score(payload, "post_review_get_video_score")
+            prf_raw = payload.get("post_review_final")
+            if isinstance(prf_raw, dict):
+                post_review_final = prf_raw
+            else:
+                post_review_final = post_review.review_final.model_dump()
 
-            post_meta_entries: List[Dict[str, Any]] = []
-            for key, value in payload.items():
-                if not (str(key).endswith("_post_meta_list") and isinstance(value, list) and value):
-                    continue
-                for idx, item in enumerate(value):
-                    if not isinstance(item, dict):
-                        continue
-                    post_meta_entries.append({"post_index": idx, "item": item})
+            approved = post_review_final.get("approved")
+            if approved is True:
+                final_approved_key = "true"
+            elif approved is False:
+                final_approved_key = "false"
+            else:
+                final_approved_key = "none"
 
-            if not post_meta_entries:
-                continue
+            row = {
+                "task_id": task_formatted.task_id_str,
+                "platform": platform,
+                "source_file": fp.as_posix(),
+                "product_model": task_formatted.product_model or "",
+                "created_at": task_formatted.created_at or "",
+                "review_status": task_formatted.review_status or "",
+                "task_status": task_formatted.task_status or "",
+                "flow_status": task_formatted.flow_status or "",
+                "final_approved_key": final_approved_key,
+                "share_url": post_meta.share_url,
+                "title": post_meta.title,
+                "desc": post_meta.desc,
+                "author_nickname": post_meta.nickname,
+                "author_uid": post_meta.user_id,
+                "review_text": post_review.review_text.model_dump(),
+                "review_duplicate": post_review.review_duplicate.model_dump(),
+                "review_image": post_review.review_image.model_dump(),
+                "review_video": post_review.review_video.model_dump(),
+                "review_final": post_review.review_final.model_dump(),
+                "digg_count": post_meta.liked_count,
+                "comment_count": post_meta.comment_count,
+                "collect_count": post_meta.collected_count,
+                "share_count": post_meta.share_count,
+                "image_urls": post_meta.image_urls,
+                "video_urls": post_meta.video_urls,
+                "image_count": len(post_meta.image_urls),
+                "video_count": len(post_meta.video_urls),
+            }
+            rows.append(row)
 
-            for entry in post_meta_entries:
-                idx = int(entry["post_index"])
-                item = entry["item"]
-
-                post_meta = item.get("post_meta") or {}
-                interact_info = post_meta.get("interact_info") or {}
-                author_info = post_meta.get("author") or {}
-
-                share_url = str(item.get("share_url") or post_meta.get("share_url") or "").strip()
-                post_title_from_meta = str(post_meta.get("title") or post_meta.get("desc") or "").strip()
-                post_desc_from_meta = str(post_meta.get("desc") or "").strip()
-                post_author_nickname = str(author_info.get("nickname") or author_info.get("name") or "")
-                post_author_uid = str(author_info.get("uid") or author_info.get("sec_uid") or "")
-
-                digg_count = interact_info.get("digg_count") or 0
-                comment_count = interact_info.get("comment_count") or 0
-                collect_count = interact_info.get("collect_count") or 0
-                share_count = interact_info.get("share_count") or 0
-
-                image_urls = []
-                if isinstance(post_meta.get("image_urls"), list):
-                    image_urls = [u for u in post_meta["image_urls"] if isinstance(u, str) and u.startswith("http")]
-                if not image_urls and isinstance(post_meta.get("image_url_candidates"), list):
-                    for candidates in post_meta["image_url_candidates"]:
-                        if isinstance(candidates, list) and candidates:
-                            first_url = candidates[0]
-                            if isinstance(first_url, str) and first_url.startswith("http"):
-                                image_urls.append(first_url)
-
-                video_urls = []
-                if isinstance(post_meta.get("video_urls"), list):
-                    video_urls = [u for u in post_meta["video_urls"] if isinstance(u, str) and u.startswith("http")]
-
-                media_type = "video" if video_urls else ("image" if image_urls else "unknown")
-
-                rows.append({
-                    "task_id": task_id,
-                    "platform": platform,
-                    "source_file": fp.as_posix(),
-                    "post_index": idx,
-                    "share_url": share_url,
-                    "title": post_title_from_meta or post_title,
-                    "desc": post_desc_from_meta or post_desc,
-                    "author_nickname": post_author_nickname,
-                    "author_uid": post_author_uid,
-                    "author": author,
-                    "product_model": product_model,
-                    "activity_desc": activity_desc,
-                    "text_score": text_score,
-                    "image_score": image_score,
-                    "video_score": video_score,
-                    "digg_count": digg_count,
-                    "comment_count": comment_count,
-                    "collect_count": collect_count,
-                    "share_count": share_count,
-                    "image_urls": image_urls,
-                    "video_urls": video_urls,
-                    "media_type": media_type,
-                    "image_count": len(image_urls),
-                    "video_count": len(video_urls),
-                })
-
-        rows.sort(key=lambda x: (x["platform"], x["task_id"], x["post_index"]))
+        rows.sort(key=lambda x: (x["platform"], x["task_id"]))
         return rows
 
     def _build_app(self) -> FastAPI:
@@ -261,6 +190,9 @@ class PostReviewSubmitServiceTask(BaseTask):
         class SubmitRowRequest(BaseModel):
             source_file: str
             media_marks: Optional[Dict[str, str]] = None
+            # 仅随「保存图片/视频标注」一并提交；不能单独用这两项归档。
+            approved: Optional[bool] = None
+            reason: Optional[str] = ""
 
         @app.get("/api/media-stream")
         def api_media_stream(
@@ -334,7 +266,6 @@ class PostReviewSubmitServiceTask(BaseTask):
 
         @app.post("/api/submit-row")
         def api_submit_row(payload: SubmitRowRequest) -> Dict[str, Any]:
-            """提交审核结果，将任务文件移动到 target_dir。"""
             data_root = task.source_dir.resolve()
             step_target_root = task.target_dir.resolve()
             raw_src = Path(payload.source_file)
@@ -345,19 +276,34 @@ class PostReviewSubmitServiceTask(BaseTask):
                 raise HTTPException(status_code=400, detail="invalid source_file path") from exc
 
             target = step_target_root / rel
-            if target.exists() and target.is_file():
-                return {"ok": True, "already_submitted": True, "source_file": src.as_posix(), "target_file": target.as_posix()}
 
+            # 用「是否为 None」区分：未传 media_marks 键则为 None。
+            do_media = payload.media_marks is not None
+            if not do_media:
+                raise HTTPException(status_code=400, detail="请提交 media_marks（保存图片/视频标注）")
+
+            # 仅在「源文件已不存在」时视为已归档；避免目标目录残留同名文件导致无法保存标注。
             if not src.exists() or not src.is_file():
+                if target.exists() and target.is_file():
+                    return {
+                        "ok": True,
+                        "already_submitted": True,
+                        "source_file": src.as_posix(),
+                        "target_file": target.as_posix(),
+                    }
                 raise HTTPException(status_code=404, detail=f"source file not found: {src.as_posix()}")
 
-            js = task._safe_read_json(src)
+            try:
+                with open(src.as_posix(), "r", encoding="utf-8") as f:
+                    js = json.load(f)
+            except Exception as exc:
+                raise HTTPException(status_code=400, detail=f"source file is not valid json: {exc}") from exc
             if not isinstance(js, dict):
                 raise HTTPException(status_code=400, detail="source file is not valid json object")
 
             raw_marks = payload.media_marks or {}
             media_marks: Dict[str, str] = {}
-            for k, v in raw_marks.items():
+            for k, v in (raw_marks or {}).items():
                 if isinstance(k, str) and k:
                     mark_label = "" if v is None else str(v)
                     if mark_label not in ("符合", "不符合", ""):
@@ -367,21 +313,18 @@ class PostReviewSubmitServiceTask(BaseTask):
             # 基于文件内 post_meta 的媒体清单，把 marks 拆分到图片/视频字段中，保持与 pretty 任务一致的结构。
             image_url_set: set[str] = set()
             video_url_set: set[str] = set()
-            for key, value in js.items():
-                if not (isinstance(key, str) and key.endswith("_post_meta_list") and isinstance(value, list)):
-                    continue
-                for item in value:
-                    if not isinstance(item, dict):
-                        continue
-                    post_meta = item.get("post_meta") if isinstance(item.get("post_meta"), dict) else {}
-                    if isinstance(post_meta.get("image_urls"), list):
-                        for u in post_meta.get("image_urls") or []:
-                            if isinstance(u, str) and u.startswith("http"):
-                                image_url_set.add(u)
-                    if isinstance(post_meta.get("video_urls"), list):
-                        for u in post_meta.get("video_urls") or []:
-                            if isinstance(u, str) and u.startswith("http"):
-                                video_url_set.add(u)
+
+            top_post_meta = js.get("post_meta")
+            if not isinstance(top_post_meta, dict):
+                raise HTTPException(status_code=400, detail="missing top-level post_meta")
+            if isinstance(top_post_meta.get("image_urls"), list):
+                for u in top_post_meta.get("image_urls") or []:
+                    if isinstance(u, str) and u.startswith("http"):
+                        image_url_set.add(u)
+            if isinstance(top_post_meta.get("video_urls"), list):
+                for u in top_post_meta.get("video_urls") or []:
+                    if isinstance(u, str) and u.startswith("http"):
+                        video_url_set.add(u)
 
             image_marks: Dict[str, str] = {}
             video_marks: Dict[str, str] = {}
@@ -393,21 +336,67 @@ class PostReviewSubmitServiceTask(BaseTask):
                 else:
                     pass
 
-            js["post_review_submit"] = {
-                "image_marks": image_marks,
-                "video_marks": video_marks,
-            }
-            js["post_review_submit_status"] = "done"
+            # 将提交标记写回 post_review.review_image / post_review.review_video
+            # 风格参考 post_review_text_tags_review_task.py：PostReview.from_dict → 修改字段 → to_dict 回写。
+            post_review = PostReview.from_dict(js.get("post_review", dict()))
+
+            def _count_marks(url_set: set[str], marks: Dict[str, str]) -> tuple[int, int, int]:
+                """返回 (total, check_count, cross_count)；未标记默认视为“符合”。"""
+                total = len(url_set)
+                cross_count = 0
+                for u in url_set:
+                    if marks.get(u) == "不符合":
+                        cross_count += 1
+                check_count = total - cross_count
+                return total, check_count, cross_count
+
+            img_total, img_check, img_cross = _count_marks(image_url_set, image_marks)
+            vid_total, vid_check, vid_cross = _count_marks(video_url_set, video_marks)
+
+            post_review.review_image.total_count = img_total
+            post_review.review_image.check_count = img_check
+            post_review.review_image.cross_count = img_cross
+            post_review.review_image.marks = image_marks
+
+            post_review.review_video.total_count = vid_total
+            post_review.review_video.check_count = vid_check
+            post_review.review_video.cross_count = vid_cross
+            post_review.review_video.marks = video_marks
+
+            if payload.approved is not None:
+                post_review.review_final.approved = payload.approved
+                post_review.review_final.reply_to_user = str(payload.reason or "").strip()
+
+            js["post_review"] = post_review.to_dict()
 
             src.write_text(json.dumps(js, ensure_ascii=False, indent=2), encoding="utf-8")
+
             target.parent.mkdir(parents=True, exist_ok=True)
             shutil.move(src.as_posix(), target.as_posix())
-            return {"ok": True, "source_file": src.as_posix(), "target_file": target.as_posix()}
+            return {
+                "ok": True,
+                "moved": True,
+                "saved_media": True,
+                "saved_review_final": payload.approved is not None,
+                "source_file": src.as_posix(),
+                "target_file": target.as_posix(),
+            }
 
         @app.get("/", response_class=HTMLResponse)
         @app.get("/gallery", response_class=HTMLResponse)
         def gallery_page(request: Request) -> HTMLResponse:
-            rows = task._collect_post_rows()
+            rows = task.collect_post_rows()
+
+            def _uniq(field: str) -> List[str]:
+                seen: set[str] = set()
+                out: List[str] = []
+                for r in rows:
+                    s = str(r.get(field) or "").strip()
+                    if s and s not in seen:
+                        seen.add(s)
+                        out.append(s)
+                return sorted(out)
+
             return templates.TemplateResponse(
                 request=request,
                 name="gallery.html",
@@ -415,6 +404,9 @@ class PostReviewSubmitServiceTask(BaseTask):
                     "rows": rows,
                     "data_dir": task.source_dir.as_posix(),
                     "count": len(rows),
+                    "product_models": _uniq("product_model"),
+                    "review_statuses": _uniq("review_status"),
+                    "task_statuses": _uniq("task_status"),
                 },
             )
 
@@ -431,10 +423,10 @@ class PostReviewSubmitServiceTask(BaseTask):
 async def main():
     task = PostReviewSubmitServiceTask(
         check_interval=60,
-        source_dir="temp/banniu_37728/step_14_finished",
-        target_dir="temp/banniu_37728/step_14_finished2",
+        source_dir="temp/banniu_37728_v2/step_5_3_post_review_text_tags_review",
+        target_dir="temp/banniu_37728_v2/step_6_post_review_submit",
         templates_dir="toolbox/porter/tasks/post_review_submit_service_task/templates",
-        host="127.0.0.1",
+        host="0.0.0.0",
         port=8001,
         service_registry_dir="temp/service_registry",
         service_name="post_review_submit_service",

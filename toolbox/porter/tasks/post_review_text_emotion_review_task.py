@@ -5,6 +5,7 @@ from datetime import datetime
 import logging
 import os
 from pathlib import Path
+import traceback
 from typing import Dict, List, Optional, Tuple
 
 logger = logging.getLogger("toolbox")
@@ -12,9 +13,11 @@ logger = logging.getLogger("toolbox")
 from project_settings import project_path, environment
 from toolbox.porter.llm import LLMAsJudge, AsyncLLMAsJudge
 from toolbox.porter.tasks.base_task import BaseTask, TaskJsonUtils
+from toolbox.porter.entity.post_meta import PostMeta
+from toolbox.porter.entity.post_review import PostReview
 
 
-_EMOTION_SYSTEM_PROMPT = """
+EMOTION_SYSTEM_PROMPT = """
 ## 背景
 公司为推广新的产品让购买过产品的用户在社交媒体上发分享贴子，审核通过后给用户送礼品。
 
@@ -50,8 +53,6 @@ class PostReviewTextEmotionReviewTask(BaseTask, TaskJsonUtils):
     def __init__(self,
                  check_interval: int,
                  platform_to_dirs: List[Tuple[str, str]],
-                 platform_meta_config: Optional[Dict[str, Dict[str, object]]] = None,
-                 label_to_score: Dict[str, float] = None,
                  key_of_llm_base_url: str = "POST_REVIEW_LLM_BASE_URL",
                  key_of_llm_api_key: str = "POST_REVIEW_LLM_API_KEY",
                  key_of_llm_model_id: str = "POST_REVIEW_LLM_MODEL_ID",
@@ -61,7 +62,6 @@ class PostReviewTextEmotionReviewTask(BaseTask, TaskJsonUtils):
             flag=f"[{self.__class__.__name__}]",
             check_interval=check_interval
         )
-
         self.platform_to_dir = list()
         for platform, src, dst in platform_to_dirs:
             p = str(platform).strip().lower()
@@ -69,8 +69,6 @@ class PostReviewTextEmotionReviewTask(BaseTask, TaskJsonUtils):
             dst = self.resolve_project_path(dst)
             self.platform_to_dir.append((p, src, dst))
 
-        self.platform_meta_config = platform_meta_config
-        self.label_to_score = label_to_score or {"积极": 100, "中性": 50, "消极": 0}
         llm_base_url = environment.get(key_of_llm_base_url, default="http://127.0.0.1:11434/v1")
         llm_api_key = environment.get(key_of_llm_api_key, default="ollama")
         llm_model_id = environment.get(key_of_llm_model_id, default="qwen2.5:14b-instruct")
@@ -78,98 +76,37 @@ class PostReviewTextEmotionReviewTask(BaseTask, TaskJsonUtils):
             base_url=llm_base_url,
             api_key=llm_api_key,
             model_id=llm_model_id,
-            system_prompt=_EMOTION_SYSTEM_PROMPT,
+            system_prompt=EMOTION_SYSTEM_PROMPT,
         )
 
-    @staticmethod
-    def extract_content(obj: dict, keys: List[str]) -> str:
-        """按 keys 顺序合并 obj 中所有非空字符串字段，换行连接。"""
-        if not isinstance(obj, dict):
-            return ""
-        parts: List[str] = []
-        for key in keys:
-            value = obj.get(key)
-            if isinstance(value, str) and value.strip():
-                parts.append(value.strip())
-        return "\n".join(parts)
-
-    async def score_text(self, title: str, body: str) -> Dict[str, object]:
-        user_prompt = f"标题：{title or ''}\n正文：{body or ''}".strip()
-
-        parsed = await self.llm_judge.complete_json(user_prompt)
-        js = parsed if isinstance(parsed, dict) else {}
-        label = str(js.get("label") or "").strip()
-        desc = str(js.get("desc") or "").strip() or "empty desc from llm"
-        score = self.label_to_score.get(label, 0.0)
+    async def score_text(self, title: str, desc: str) -> Dict[str, object]:
+        user_prompt = f"标题：\n{title or ''}\n正文：\n{desc or ''}".strip()
+        js = await self.llm_judge.complete_json(user_prompt)
         return {
-            "score": score,
-            "label": label,
-            "desc": desc,
+            "label": js["label"],
+            "desc": js["desc"],
         }
 
-    async def review_one_platform(self, payload: dict, platform: str, config: Dict[str, object]) -> Optional[dict]:
-        meta_list_key = str(config.get("meta_list_key") or "").strip()
-        if not meta_list_key:
-            return None
+    async def process_one_file(self, task_file: Path, target_dir: Path):
+        payload = await self.load_json_file(task_file)
+        post_meta = PostMeta.from_dict(payload["post_meta"])
+        js = await self.score_text(
+            title=post_meta.title,
+            desc=post_meta.desc,
+        )
+        post_review = PostReview.from_dict(payload.get("post_review", dict()))
+        post_review.review_text.emotion_label = js["label"]
+        post_review.review_text.emotion_desc = js["desc"]
 
-        rows = payload.get(meta_list_key)
-        if not isinstance(rows, list) or not rows:
-            return None
-
-        title_keys = [str(x) for x in (config.get("title_keys") or [])]
-        body_keys = [str(x) for x in (config.get("body_keys") or [])]
-
-        row = rows[0]
-        if not isinstance(row, dict):
-            return None
-        post_meta = row.get("post_meta") or {}
-        if not isinstance(post_meta, dict):
-            return None
-        title = self.extract_content(post_meta, title_keys)
-        body = self.extract_content(post_meta, body_keys)
-        if not title and not body:
-            return None
-
-        emotion = await self.score_text(title=title, body=body)
-        item = {
-            "index": 0,
-            "share_url": row.get("share_url"),
-            "title": title,
-            "body": body,
-            **emotion,
-        }
-
-        label = str(item.get("label") or "")
-        label_count = {"积极": 0, "中性": 0, "消极": 0}
-        if label in label_count:
-            label_count[label] = 1
-            overall_label = label
-        else:
-            overall_label = "中性"
-        overall_score = item.get("score")
-        overall_desc = f"{item.get('desc') or ''}".strip()
-
-        return {
-            "platform": platform,
-            "meta_list_key": meta_list_key,
-            "overall_label": overall_label,
-            "overall_score": overall_score,
-            "overall_desc": overall_desc,
-            "label_count": label_count,
-            "reviewed_count": 1,
-            "item_reviews": [item],
-            "reviewed_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-            "llm_model_id": self.llm_judge.model_id,
-        }
+        dst = target_dir / task_file.name
+        self.safe_move(task_file, dst)
+        await self.append_kv_to_task_file(dst, kv={"post_review": post_review.to_dict()})
+        return dst
 
     async def do_task(self):
         if not self.platform_to_dir:
             logger.info(f"{self.flag}platform_to_dirs 为空，跳过")
             return
-
-        moved = 0
-        reviewed = 0
-        scanned = 0
 
         for platform, source_dir, target_dir in self.platform_to_dir:
             if not source_dir.exists():
@@ -182,33 +119,12 @@ class PostReviewTextEmotionReviewTask(BaseTask, TaskJsonUtils):
                 continue
 
             for src in files:
-                scanned += 1
-                payload = await self.load_json_file(src)
-                if payload is None:
+                try:
+                    dst = await self.process_one_file(src, target_dir)
+                except Exception as error:
+                    logger.info(f"{self.flag}任务失败: {src.as_posix()}，error type: {type(error)}, error text: {str(error)}, traceback: {traceback.format_exc()}")
                     continue
-
-                conf = (self.platform_meta_config or {}).get(platform) if isinstance(self.platform_meta_config, dict) else None
-                if not isinstance(conf, dict):
-                    logger.info(f"{self.flag}缺少平台配置，跳过: platform={platform}, file={src.name}")
-                    continue
-
-                review_result = await self.review_one_platform(payload, platform, conf)
-                if review_result is None:
-                    logger.info(f"{self.flag}未命中可审核元信息，跳过: {src.name}, platform={platform}")
-                    continue
-
-                payload["post_review_text_emotion_review"] = review_result
-                payload["post_review_text_emotion_review_status"] = "done"
-                payload["post_review_text_emotion_review_reason"] = "matched_meta_list"
-
-                dst = target_dir / src.name
-                final = self.safe_move(src, dst)
-                await self.write_json(final, payload)
-                reviewed += 1
-                moved += 1
-                logger.info(f"{self.flag}情感审核完成并流转: {src.name} -> {final.as_posix()}, platform={platform}")
-
-        logger.info(f"{self.flag}本轮扫描 {scanned} 个文件，审核 {reviewed} 个，移动 {moved} 个。")
+                logger.info(f"{self.flag}任务流转并补充元信息成功: {dst.as_posix()}")
 
 
 def main():
@@ -220,39 +136,8 @@ def main():
     task = PostReviewTextEmotionReviewTask(
         check_interval=60,
         platform_to_dirs=[
-            ("douyin", "data/douyin_share_media_download/tasks", "data/douyin_share_media_download/text_emotion_review_finished"),
-            ("xiaohongshu", "data/xiaohongshu_share_media_download/tasks", "data/xiaohongshu_share_media_download/text_emotion_review_finished"),
-            ("kuaishou", "data/kuaishou_share_media_download/tasks", "data/kuaishou_share_media_download/text_emotion_review_finished"),
-            ("bilibili", "data/bilibili_share_media_download/tasks", "data/bilibili_share_media_download/text_emotion_review_finished"),
-            ("xiaoheihe", "data/xiaoheihe_share_media_download/tasks", "data/xiaoheihe_share_media_download/text_emotion_review_finished"),
+            ("douyin", "temp/banniu_37728_v2/step_4_post_review_duplicate_review/douyin", "temp/banniu_37728_v2/step_5_1_post_review_text_emotion_review/douyin"),
         ],
-        platform_meta_config={
-            "xiaohongshu": {
-                "meta_list_key": "xiaohongshu_post_meta_list",
-                "title_keys": ["title"],
-                "body_keys": ["desc"],
-            },
-            "douyin": {
-                "meta_list_key": "douyin_post_meta_list",
-                "title_keys": ["title"],
-                "body_keys": ["desc"],
-            },
-            "kuaishou": {
-                "meta_list_key": "kuaishou_post_meta_list",
-                "title_keys": ["title"],
-                "body_keys": ["caption"],
-            },
-            "bilibili": {
-                "meta_list_key": "bilibili_post_meta_list",
-                "title_keys": ["title"],
-                "body_keys": ["desc", "body_text"],
-            },
-            "xiaoheihe": {
-                "meta_list_key": "xiaoheihe_post_meta_list",
-                "title_keys": ["title"],
-                "body_keys": ["content", "desc"],
-            },
-        },
         key_of_llm_base_url="POST_REVIEW_LLM_BASE_URL",
         key_of_llm_api_key="POST_REVIEW_LLM_API_KEY",
         key_of_llm_model_id="POST_REVIEW_LLM_MODEL_ID",

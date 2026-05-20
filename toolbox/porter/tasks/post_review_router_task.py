@@ -68,6 +68,7 @@ class PostReviewRouterTask(BaseTask, TaskJsonUtils):
                  platform_to_dir: Dict[str, str],
                  blank_dir: Optional[str],
                  unknown_dir: Optional[str],
+                 share_post_url_field: str = "晒单内容链接",
                  **kwargs
                  ):
         super().__init__(
@@ -89,6 +90,8 @@ class PostReviewRouterTask(BaseTask, TaskJsonUtils):
         self.blank_dir = (project_path / blank_dir) if not os.path.isabs(blank_dir) else Path(blank_dir)
         self.unknown_dir = (project_path / unknown_dir) if not os.path.isabs(unknown_dir) else Path(unknown_dir)
 
+        self.share_post_url_field = share_post_url_field
+
     @staticmethod
     def _extract_urls_from_share_link_field(value: object) -> List[str]:
         urls: List[str] = []
@@ -109,22 +112,21 @@ class PostReviewRouterTask(BaseTask, TaskJsonUtils):
                     urls.extend(re.findall(pattern, v))
         return list(dict.fromkeys(urls))
 
-    @classmethod
-    def _detect_platform(cls, payload: dict) -> Tuple[Optional[str], str]:
+    def _detect_platform(self, payload: dict) -> Tuple[Optional[str], str]:
         if not isinstance(payload, dict):
             return None, "invalid_payload"
         task_formatted = payload.get("task_formatted")
         if not isinstance(task_formatted, dict):
             return None, "no_task_formatted"
 
-        share_link = task_formatted.get("晒单内容链接")
-        urls = cls._extract_urls_from_share_link_field(share_link)
+        share_link = task_formatted[self.share_post_url_field]
+        urls = self._extract_urls_from_share_link_field(share_link)
         if not urls:
             return None, "no_share_link_url"
 
         for url in urls:
             low_url = url.lower()
-            for platform, patterns in cls._PLATFORM_PATTERNS.items():
+            for platform, patterns in self._PLATFORM_PATTERNS.items():
                 for pat in patterns:
                     if re.search(pat, low_url, flags=re.IGNORECASE):
                         return platform, f"url:{url}"
@@ -178,17 +180,17 @@ def main():
 
     task = PostReviewRouterTask(
         check_interval=60,
-        source_dir="data/banniu_task_download/tasks",
+        source_dir="temp/banniu_39369/routed/blank",
         platform_to_dir={
-            "xiaohongshu": "data/banniu_task_download/routed/xiaohongshu",
-            "douyin": "data/banniu_task_download/routed/douyin",
-            "kuaishou": "data/banniu_task_download/routed/kuaishou",
-            "bilibili": "data/banniu_task_download/routed/bilibili",
-            "xiaoheihe": "data/banniu_task_download/routed/xiaoheihe",
-            "weibo": "data/banniu_task_download/routed/weibo",
+            "xiaohongshu": "temp/banniu_39369/step_2_post_review_router/routed/xiaohongshu",
+            "douyin": "temp/banniu_39369/step_2_post_review_router/routed/douyin",
+            "kuaishou": "temp/banniu_39369/step_2_post_review_router/routed/kuaishou",
+            "bilibili": "temp/banniu_39369/step_2_post_review_router/routed/bilibili",
+            "xiaoheihe": "temp/banniu_39369/step_2_post_review_router/routed/xiaoheihe",
+            "weibo": "temp/banniu_39369/step_2_post_review_router/routed/weibo",
         },
-        blank_dir="data/banniu_task_download/routed/blank",
-        unknown_dir="data/banniu_task_download/routed/unknown",
+        blank_dir="temp/banniu_39369/step_2_post_review_router/routed/blank",
+        unknown_dir="temp/banniu_39369/step_2_post_review_router/routed/unknown",
     )
     asyncio.run(task.do_task())
 

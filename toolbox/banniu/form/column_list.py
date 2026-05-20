@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import argparse
+import asyncio
 import json
 import logging
 from typing import Any, Dict, List, Optional
@@ -166,10 +167,6 @@ class ColumnListForm(object):
         return m
 
     def get_column_id_by_name(self, column_name: Any) -> Optional[str]:
-        """
-        根据列展示名 ``name`` 返回 ``column_id``（字符串）。
-        无匹配列名或未配置 ``name`` 的列不参与映射；找不到时返回 ``None``。
-        """
         if column_name is None:
             return None
         key = str(column_name).strip()
@@ -224,34 +221,63 @@ class ColumnListForm(object):
         lk = _column_value_lookup_key(ckey, vkey)
         return self.column_value_lookup.get(lk)
 
+    def map_option_value_to_id(self, column_id: Any, value: Any) -> Any:
+        if column_id is None:
+            return value
+        ckey = str(column_id).strip()
+        if not ckey:
+            return value
+        options = self.get_column_options_by_id(ckey) or []
+        if not options:
+            return value
+
+        title_to_id: Dict[str, str] = {}
+        for opt in options:
+            if not isinstance(opt, dict):
+                continue
+            title = str(opt.get("title") or "").strip()
+            oid = str(opt.get("id") or "").strip()
+            if title and oid and title not in title_to_id:
+                title_to_id[title] = oid
+
+        def _map_one(token: str) -> str:
+            s = str(token).strip()
+            if not s:
+                return ""
+            return title_to_id.get(s, s)
+
+        if isinstance(value, str) and "," in value:
+            parts = [_map_one(p) for p in value.split(",")]
+            parts = [p for p in parts if p != ""]
+            return ",".join(parts)
+        if isinstance(value, str):
+            return _map_one(value)
+        return value
+
 
 def get_args():
     parser = argparse.ArgumentParser(description="拉取 column.list 并构建 ColumnListForm")
     parser.add_argument(
         "--project_id",
-        default="37728",
+        default="39369",
         type=str,
     )
     args = parser.parse_args()
     return args
 
 
-def main() -> None:
-    """
-    使用班牛 client 拉取 column.list，实例化 ColumnListForm，便于本地调试 rows / column_id_map 等。
-    运行：python -m toolbox.banniu.form.column_list
-    """
+async def main() -> None:
     args = get_args()
 
     from project_settings import environment
-    from toolbox.banniu.banniu_client import BanNiuClient
+    from toolbox.banniu.restful.banniu_client import AsyncBanNiuRestfulClient
 
-    client = BanNiuClient(
+    client = AsyncBanNiuRestfulClient(
         app_key=environment.get("BANNIU_APP_KEY"),
         app_secret=environment.get("BANNIU_APP_SECRET"),
         access_token=environment.get("BANNIU_ACCESS_TOKEN"),
     )
-    js = client.column_list(project_id=str(args.project_id))
+    js = await client.column_list(project_id=str(args.project_id))
     rows = js["response"]["map"]["result"]
     form = ColumnListForm(rows)
     print(json.dumps(form.rows, ensure_ascii=False, indent=4))
@@ -267,4 +293,4 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())
