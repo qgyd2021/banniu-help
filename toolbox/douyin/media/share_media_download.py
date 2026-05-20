@@ -76,7 +76,7 @@ class ShareMediaDownload(object):
         )
         if redirect_response.status_code != 200:
             raise AssertionError(
-                f"invalid share_url: {share_url}, status_code: {redirect_response.status_code}"
+                f"invalid share_url: {share_url}, status_code: {redirect_response.status_code}, text: {redirect_response.text}"
             )
 
         final_url = redirect_response.url
@@ -92,7 +92,7 @@ class ShareMediaDownload(object):
         )
         if page_response.status_code != 200:
             raise AssertionError(
-                f"request failed; page_url: {page_url}, status_code: {page_response.status_code}"
+                f"request failed; page_url: {page_url}, status_code: {page_response.status_code}, text: {page_response.text}"
             )
 
         pattern = re.compile(r"window\._ROUTER_DATA\s*=\s*(.*?)</script>", flags=re.DOTALL)
@@ -249,9 +249,9 @@ class ShareMediaDownload(object):
 def main():
     client = ShareMediaDownload()
 
-    share_text = """
-7.12 复制打开抖音，看看【H的图文作品】# 迈从 # 迈从A7V2 新尝试，大手玩家大喜  https://v.douyin.com/OJsMk7lQIJM/ Bgo:/ :5pm d@A.GI 05/20
-"""
+#     share_text = """
+# 9.43 06/29 g@B.GV EuF:/ :9pm 太好了，太棒了，到了到了# 迈从 # 迈从A7V2  https://v.douyin.com/za3mLgMkh3Y/ 复制此链接，打开Dou音搜索，直接观看视频！
+# """
     post_meta = client.get_post_meta_by_share_text(share_text)
     print("post_meta:")
     print(json.dumps(post_meta, ensure_ascii=False, indent=2))

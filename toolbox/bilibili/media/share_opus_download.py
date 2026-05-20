@@ -1,12 +1,5 @@
 #!/usr/bin/python3
 # -*- coding: utf-8 -*-
-"""
-解析 B 站「动态 / 图文 Opus」页面（含 b23 短链跳转到 /opus/…），抽取正文与图片，并可下载到本地。
-
-说明：
-- 依赖页面内嵌的 __INITIAL_STATE__，与 share_video_download.py 中视频稿件逻辑分离。
-- 若落地为验证码 / 风控页，无法解析，需浏览器过验证或带 Cookie 后再试。
-"""
 import json
 import re
 from pathlib import Path
@@ -17,7 +10,7 @@ from toolbox.bilibili.media.share_download_base import BilibiliShareDownloadBase
 
 class ShareOpusDownload(BilibiliShareDownloadBase):
     @staticmethod
-    def get_entry_url_by_share_text(text: str) -> str:
+    def get_share_url_by_share_text(text: str) -> str:
         patterns = [
             r"https?://b23\.tv/[A-Za-z0-9]+(?:\?[^\s]*)?",
             r"https?://(?:www\.)?bilibili\.com/opus/\d+(?:\?[^\s]*)?",
@@ -27,10 +20,10 @@ class ShareOpusDownload(BilibiliShareDownloadBase):
             match = re.search(pattern, text, flags=re.IGNORECASE)
             if match is not None:
                 return match.group(0).rstrip(".,;)")
-        raise AssertionError(f"no opus/b23/t.bilibili entry url found; text: {text}")
+        raise AssertionError(f"no opus/b23/t.bilibili share url found; text: {text}")
 
     @staticmethod
-    def _parse_opus_id_from_url(url: str) -> Optional[str]:
+    def get_opus_id_from_url(url: str) -> Optional[str]:
         match = re.search(r"bilibili\.com/opus/(\d+)", url, flags=re.IGNORECASE)
         if match:
             return match.group(1)
@@ -39,29 +32,59 @@ class ShareOpusDownload(BilibiliShareDownloadBase):
             return match.group(1)
         return None
 
-    def fetch_opus_page(self, entry_url: str) -> Tuple[str, str, Dict[str, Any]]:
-        """
-        请求入口 URL（b23 或 opus 直链），返回 (落地 URL, HTML, __INITIAL_STATE__)。
-        """
-        response = self.session.get(entry_url, allow_redirects=True, timeout=30)
-        if response.status_code != 200:
-            raise AssertionError(f"request failed; status_code: {response.status_code}, url: {entry_url}")
-        if self._looks_like_captcha_or_risk(response):
-            raise AssertionError(
-                "页面为验证码或风控，无法解析 Opus。请在浏览器打开链接完成验证后，"
-                "使用地址栏中的 https://www.bilibili.com/opus/数字 再试，或配置登录 Cookie。"
-            )
-        final_url = response.url
-        html = response.text or ""
-        if not re.search(r"bilibili\.com/opus/\d+", final_url, re.I):
-            raise AssertionError(
-                f"落地 URL 不是 Opus 页: {final_url}。"
-                "本模块仅处理会跳转到 /opus/数字 的 b23 或 Opus 直链；视频稿件请用 share_video_download.py。"
-            )
-        state = self._extract_initial_state_json(html)
-        if not state:
-            raise AssertionError("未从 HTML 中解析到 __INITIAL_STATE__，页面结构可能已变更。")
-        return final_url, html, state
+    def _fetch_dynamic_detail_state(self, opus_id: str) -> Dict[str, Any]:
+        js = self.get_web_dynamic(opus_id)
+        item = js["data"]["item"]
+        if not item:
+            raise AssertionError(f"dynamic detail api returned empty item; opus_id: {opus_id}")
+
+        # author = item["modules"]["author"]
+        dynamic = item["modules"]["module_dynamic"]
+        major = dynamic["major"]
+        desc = dynamic["desc"]
+
+        return self._dynamic_item_to_initial_state(item)
+
+    @staticmethod
+    def _dynamic_desc_to_paragraph(desc: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+        nodes: List[Dict[str, Any]] = []
+        if isinstance(desc, dict):
+            for node in desc.get("rich_text_nodes") or []:
+                if not isinstance(node, dict):
+                    continue
+                piece = node.get("orig_text") or node.get("text")
+                if piece:
+                    nodes.append({"type": "TEXT_NODE_TYPE_RICH", "rich": {"orig_text": piece}})
+            text = desc.get("text")
+            if not nodes and isinstance(text, str) and text:
+                nodes.append({"type": "TEXT_NODE_TYPE_WORD", "word": {"words": text}})
+        return {"text": {"nodes": nodes}}
+
+    @staticmethod
+    def _dynamic_item_to_initial_state(item: Dict[str, Any]) -> Dict[str, Any]:
+        modules = item.get("modules") or {}
+        author = modules.get("module_author") or {}
+        dynamic = modules.get("module_dynamic") or {}
+        major = dynamic.get("major") or {}
+
+        paragraph = ShareOpusDownload._dynamic_desc_to_paragraph(dynamic.get("desc"))
+        draw = major.get("draw") or {}
+        if isinstance(draw.get("items"), list):
+            paragraph["pics"] = draw.get("items") or []
+
+        detail_modules: List[Dict[str, Any]] = [
+            {"module_type": "MODULE_TYPE_AUTHOR", "module_author": author},
+            {"module_type": "MODULE_TYPE_CONTENT", "module_content": {"paragraphs": [paragraph], "major": major}},
+            {"module_type": "MODULE_TYPE_STAT", "module_stat": modules.get("module_stat") or {}},
+        ]
+
+        return {
+            "detail": {
+                "basic": item.get("basic") or {},
+                "id_str": item.get("id_str") or "",
+                "modules": detail_modules,
+            }
+        }
 
     @staticmethod
     def _node_to_text(node: Dict[str, Any]) -> str:
@@ -76,32 +99,29 @@ class ShareOpusDownload(BilibiliShareDownloadBase):
             return str(rich.get("orig_text") or rich.get("text") or "")
         return ""
 
-    @staticmethod
-    def _paragraph_to_text_and_images(para: Dict[str, Any]) -> Tuple[str, List[str]]:
-        """从单段 paragraph 抽取纯文本与图片 URL（结构随产品迭代可能变化，尽量宽松）。"""
+    def paragraph_to_text_and_images(self, paragraph: Dict[str, Any]) -> Tuple[str, List[str]]:
         texts: List[str] = []
         images: List[str] = []
 
-        text_block = para.get("text") or {}
+        text_block = paragraph.get("text") or {}
         for node in text_block.get("nodes") or []:
             if isinstance(node, dict):
-                piece = ShareOpusDownload._node_to_text(node)
+                piece = self._node_to_text(node)
                 if piece:
                     texts.append(piece)
 
-        # 图片段落：常见为 pic / images / inline 等字段
         for key in ("pics", "images", "pic_list"):
-            block = para.get(key)
+            block = paragraph.get(key)
             if isinstance(block, list):
                 for item in block:
                     if isinstance(item, dict):
-                        url = ShareOpusDownload._dig_image_url(item)
+                        url = self._dig_image_url(item)
                         if url:
                             images.append(url)
 
-        pic = para.get("pic")
+        pic = paragraph.get("pic")
         if isinstance(pic, dict):
-            url = ShareOpusDownload._dig_image_url(pic)
+            url = self._dig_image_url(pic)
             if url:
                 images.append(url)
 
@@ -150,12 +170,14 @@ class ShareOpusDownload(BilibiliShareDownloadBase):
 
     @classmethod
     def _register_image_url(cls, url: str, out: List[str], seen: set, exclude: Optional[set] = None) -> None:
-        if not url or url in seen:
-            return
-        if exclude and url in exclude:
+        if not url:
             return
         if url.startswith("http://"):
             url = "https://" + url[len("http://") :]
+        if url in seen:
+            return
+        if exclude and url in exclude:
+            return
         if cls._is_noise_image_url(url):
             return
         # 只保留静态图（避免把短视频 dyn 文件当图下）
@@ -212,29 +234,26 @@ class ShareOpusDownload(BilibiliShareDownloadBase):
             u = m.group(0).rstrip("),.;'\"\\")
             cls._register_image_url(u, out, seen, exclude=exclude)
 
-    def build_opus_meta(self, final_url: str, state: Dict[str, Any], html: str = "") -> Dict[str, Any]:
-        detail = state.get("detail") or {}
-        basic = detail.get("basic") or {}
-        opus_id = self._parse_opus_id_from_url(final_url) or (detail.get("id_str") or "")
-
-        title = (basic.get("title") or "").strip() or f"opus_{opus_id}"
-        rid_str = basic.get("rid_str") or ""
-        comment_id_str = basic.get("comment_id_str") or ""
+    def build_opus_meta(self, final_url: str, item: Dict[str, Any], html: str = "") -> Dict[str, Any]:
+        # print(json.dumps(item, ensure_ascii=False, indent=2))
+        basic = item["basic"]
+        opus_id = self.get_opus_id_from_url(final_url) or item["id_str"]
+        title = basic.get("title", "")
+        rid_str = basic["rid_str"]
+        comment_id_str = basic["comment_id_str"]
 
         author_name = ""
         author_mid = None
         pub_time = ""
         avatar_url = ""
-        for mod in detail.get("modules") or []:
-            if not isinstance(mod, dict):
+        for module in item["modules"]:
+            if not isinstance(module, dict) or module.get("module_type") != "MODULE_TYPE_AUTHOR":
                 continue
-            if mod.get("module_type") != "MODULE_TYPE_AUTHOR":
-                continue
-            block = mod.get("module_author") or {}
-            author_name = (block.get("name") or "").strip()
-            author_mid = block.get("mid")
-            pub_time = (block.get("pub_time") or "").strip()
-            face = block.get("face")
+            block = module["module_author"]
+            author_name = block["name"]
+            author_mid = block["mid"]
+            pub_time = block["pub_time"]
+            face = block["face"]
             if isinstance(face, str) and face.startswith("http"):
                 avatar_url = face
             break
@@ -247,28 +266,28 @@ class ShareOpusDownload(BilibiliShareDownloadBase):
         content_images: List[str] = []
         seen_img: set = set()
 
-        for mod in detail.get("modules") or []:
-            if not isinstance(mod, dict) or mod.get("module_type") != "MODULE_TYPE_CONTENT":
+        for module in item["modules"]:
+            if not isinstance(module, dict) or module.get("module_type") != "MODULE_TYPE_CONTENT":
                 continue
-            content = mod.get("module_content") or {}
-            for para in content.get("paragraphs") or []:
-                if not isinstance(para, dict):
+            content = module["module_content"]
+            for paragraph in content["paragraphs"] or []:
+                if not isinstance(paragraph, dict):
                     continue
-                line, imgs = self._paragraph_to_text_and_images(para)
-                if line.strip():
-                    body_lines.append(line.strip())
-                for u in imgs:
+                text, images = self.paragraph_to_text_and_images(paragraph)
+                if text.strip():
+                    body_lines.append(text.strip())
+                for u in images:
                     self._register_image_url(u, content_images, seen_img, exclude=exclude_urls)
             self._walk_collect_image_urls(content, content_images, seen_img, exclude=exclude_urls)
 
-        # 正文模块以外的 detail 子树（部分版本把图集放在其它节点）
-        self._walk_collect_image_urls(detail, content_images, seen_img, exclude=exclude_urls)
+        # 正文模块以外的 item 子树（部分版本把图集放在其它节点）
+        self._walk_collect_image_urls(item, content_images, seen_img, exclude=exclude_urls)
 
         # 整页 HTML（补漏：仅 STATE 时抓不到的图）
         self._extract_image_urls_from_html(html, content_images, seen_img, exclude=exclude_urls)
 
         like_c = comment_c = forward_c = 0
-        for mod in detail.get("modules") or []:
+        for mod in item.get("modules") or []:
             if not isinstance(mod, dict) or mod.get("module_type") != "MODULE_TYPE_STAT":
                 continue
             st = mod.get("module_stat") or {}
@@ -287,7 +306,7 @@ class ShareOpusDownload(BilibiliShareDownloadBase):
 
         bvids: List[str] = []
         seen_bv: set = set()
-        for mod in detail.get("modules") or []:
+        for mod in item.get("modules") or []:
             if not isinstance(mod, dict) or mod.get("module_type") != "MODULE_TYPE_CONTENT":
                 continue
             blob = json.dumps(mod.get("module_content") or {}, ensure_ascii=False)
@@ -322,24 +341,104 @@ class ShareOpusDownload(BilibiliShareDownloadBase):
             },
         }
 
-    def get_opus_meta_by_url(self, entry_url: str) -> Dict[str, Any]:
-        final_url, html, state = self.fetch_opus_page(entry_url)
-        return self.build_opus_meta(final_url, state, html=html)
+    def get_opus_meta_by_html(self, final_url: str):
+        response = self.session.get(final_url, timeout=30)
+        if response.status_code != 200:
+            raise AssertionError(f"request failed; status_code: {response.status_code}, final_url: {final_url}")
+        if self.looks_like_captcha_or_risk(response):
+            raise AssertionError(
+                "页面为验证码或风控，无法解析 Opus。请在浏览器打开链接完成验证后，"
+                "使用地址栏中的 https://www.bilibili.com/opus/数字 再试，或配置登录 Cookie。"
+            )
+        html = response.text
+        state = self.extract_initial_state_json(html)
+        if state is None:
+            return None
+        opus_meta = self.build_opus_meta(final_url, item=state["detail"], html=html)
+        return opus_meta
+
+    def get_opus_meta_by_web_dynamic(self, final_url: str):
+        opus_id = self.get_opus_id_from_url(final_url)
+        js = self.get_web_dynamic(opus_id)
+        opus_meta = self.build_opus_meta_by_web_dynamic(final_url, item=js["data"]["item"])
+        return opus_meta
+
+    def build_opus_meta_by_web_dynamic(self, final_url: str, item: dict) -> Dict[str, Any]:
+        basic = item["basic"]
+        opus_id = self.get_opus_id_from_url(final_url) or item["id_str"]
+        rid_str = basic["rid_str"]
+        comment_id_str = basic["comment_id_str"]
+
+        modules = item["modules"]
+
+        opus = modules["module_dynamic"]["major"]["opus"]
+        image_urls = [pic["url"] for pic in opus["pics"]]
+        title = opus["title"]
+        body_text = opus["summary"]["text"]
+
+        module_author = modules["module_author"]
+        avatar_url = module_author["face"]
+        author_mid = module_author["mid"]
+        author_name = module_author["name"]
+        pub_time = module_author["pub_time"]
+
+        module_stat = modules["module_stat"]
+        comment_c = module_stat["comment"]["count"]
+        forward_c = module_stat["forward"]["count"]
+        like_c = module_stat["like"]["count"]
+
+        opus_meta = {
+            "opus_id": str(opus_id),
+            "post_type": "opus",
+            # "media_type": media_type,
+            "title": title,
+            "body_text": body_text,
+            "image_urls": image_urls,
+            "image_url_candidates": [[u] for u in image_urls],
+            # "embedded_bvids": bvids,
+            "final_url": final_url.split("?", 1)[0].rstrip("/") + "/",
+            "rid_str": rid_str,
+            "comment_id_str": comment_id_str,
+            "author": {
+                "mid": author_mid,
+                "name": author_name,
+                "avatar_url": avatar_url,
+                "pub_time": pub_time,
+            },
+            "interact_info": {
+                "like_count": like_c,
+                "comment_count": comment_c,
+                "forward_count": forward_c,
+            },
+        }
+        return opus_meta
+
+    def get_opus_meta_by_share_url(self, share_url: str) -> Dict[str, Any]:
+        final_url = self.get_final_url_by_share_url(share_url)
+        opus_meta = None
+        if opus_meta is None:
+            opus_meta = self.get_opus_meta_by_html(final_url)
+        if opus_meta is None:
+            opus_meta = self.get_opus_meta_by_web_dynamic(final_url)
+        if opus_meta is None:
+            raise AssertionError()
+        return opus_meta
 
     def get_opus_meta_by_share_text(self, text: str) -> Dict[str, Any]:
-        return self.get_opus_meta_by_url(self.get_entry_url_by_share_text(text))
+        share_url = self.get_share_url_by_share_text(text)
+        return self.get_opus_meta_by_share_url(share_url)
 
-    def download_opus_by_url(self, entry_url: str, output_dir: str = "output_bilibili_opus") -> Dict[str, Any]:
-        final_url, html, state = self.fetch_opus_page(entry_url)
-        meta = self.build_opus_meta(final_url, state, html=html)
-        referer = meta.get("final_url") or "https://www.bilibili.com/"
+    def download_opus_by_url(self, share_url: str, output_dir: str = "output_bilibili_opus") -> Dict[str, Any]:
+        opus_meta = self.get_opus_meta_by_share_url(share_url)
 
-        slug = self.sanitize_filename(meta["title"])
-        save_dir = Path(output_dir) / f"{meta['opus_id']}_{slug}"
+        referer = opus_meta.get("final_url") or "https://www.bilibili.com/"
+
+        slug = self.sanitize_filename(opus_meta["title"])
+        save_dir = Path(output_dir) / f"{opus_meta['opus_id']}_{slug}"
         save_dir.mkdir(parents=True, exist_ok=True)
 
         downloaded_images: List[str] = []
-        for index, image_url in enumerate(meta.get("image_urls") or [], start=1):
+        for index, image_url in enumerate(opus_meta.get("image_urls") or [], start=1):
             ext = ".jpg"
             lower = image_url.split("?", 1)[0].lower()
             if lower.endswith(".png"):
@@ -353,7 +452,7 @@ class ShareOpusDownload(BilibiliShareDownloadBase):
             downloaded_images.append(path.as_posix())
 
         result = {
-            **meta,
+            **opus_meta,
             "downloaded_images": downloaded_images,
             "save_dir": save_dir.as_posix(),
         }
@@ -362,12 +461,21 @@ class ShareOpusDownload(BilibiliShareDownloadBase):
         return result
 
     def download_opus_by_share_text(self, text: str, output_dir: str = "output_bilibili_opus") -> Dict[str, Any]:
-        return self.download_opus_by_url(self.get_entry_url_by_share_text(text), output_dir=output_dir)
+        share_url = self.get_share_url_by_share_text(text)
+        return self.download_opus_by_url(share_url, output_dir=output_dir)
 
 
 def main():
     client = ShareOpusDownload()
-    share_text = "https://b23.tv/1uHyBhd"
+    # share_text = """"
+# https://t.bilibili.com/1202874151861223426?from_spmid=dt.dt.0.0.pv&plat_id=493&share_from=dynamic&share_medium=android&share_plat=android&share_session_id=2a8ae822-79c3-40bc-9ede-c2737b7de2e8&share_source=COPY&share_tag=s_i&spmid=dt.dt.0.0&timestamp=1778904366&unique_k=njmyI6r
+#     """
+#     share_text = """"
+# https://b23.tv/oBke03t
+#     """
+    share_text = """"
+https://b23.tv/6UGNFEQ
+    """
     try:
         meta = client.get_opus_meta_by_share_text(share_text)
         print(json.dumps(meta, ensure_ascii=False, indent=2))

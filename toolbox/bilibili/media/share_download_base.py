@@ -13,21 +13,11 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 from urllib.parse import urlparse, urlunparse
 
+import cacheout
 import requests
 
 
-class BilibiliShareDownloadBase(object):
-    """视频稿件与 Opus 动态共用的请求与工具；子类实现各自解析逻辑。"""
-
-    # 从一段文案中提取「分享入口」时的匹配顺序（先 b23，再直链）
-    _SHARE_ENTRY_URL_PATTERNS: List[str] = [
-        r"https?://b23\.tv/[A-Za-z0-9]+(?:\?[^\s]*)?",
-        r"https?://(?:www\.)?bilibili\.com/opus/\d+(?:\?[^\s]*)?",
-        r"https?://(?:www\.)?bilibili\.com/video/(?:BV[a-zA-Z0-9]{10}|av\d+)(?:/|\?[^\s]*)?",
-        r"https?://m\.bilibili\.com/video/(?:BV[a-zA-Z0-9]{10}|av\d+)(?:/|\?[^\s]*)?",
-        r"https?://t\.bilibili\.com/\d+(?:\?[^\s]*)?",
-    ]
-
+class BilibiliShareDownloadBaseRestful(object):
     headers = {
         "User-Agent": (
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
@@ -41,6 +31,44 @@ class BilibiliShareDownloadBase(object):
         self.session = requests.Session()
         self.session.trust_env = False
         self.session.headers.update(self.headers)
+
+    @cacheout.memoize(ttl=30)
+    def get_web_dynamic(self, dynamic_id: str, timeout: int = 30) -> Dict[str, Any]:
+        response = self.session.get(
+            url="https://api.bilibili.com/x/polymer/web-dynamic/v1/detail",
+            params={
+                "id": dynamic_id,
+                "features": "itemOpusStyle,opusBigCover,onlyfansVote,endFooterHidden,decorationCard,onlyfansAssetsV2,ugcDelete,onlyfansQaCard,editable,opusPrivateVisible,avatarAutoTheme,sunflowerStyle,cardsEnhance,eva3CardOpus,eva3CardVideo,eva3CardComment,eva3CardVote,eva3CardUser",
+            },
+            timeout=timeout,
+        )
+        if response.status_code != 200:
+            raise AssertionError(
+                f"dynamic detail api failed; status_code: {response.status_code}, dynamic_id: {dynamic_id}"
+            )
+        js = response.json()
+        if js.get("code") != 0:
+            raise AssertionError(
+                f"dynamic detail api error; code: {js.get('code')}, message: {js.get('message')}, dynamic_id: {dynamic_id}"
+            )
+        return js
+
+    def get_final_url_by_share_url(self, share_url: str) -> str:
+        response = self.session.get(share_url, timeout=30)
+        return response.url
+
+
+class BilibiliShareDownloadBase(BilibiliShareDownloadBaseRestful):
+    """视频稿件与 Opus 动态共用的请求与工具；子类实现各自解析逻辑。"""
+
+    # 从一段文案中提取「分享入口」时的匹配顺序（先 b23，再直链）
+    _SHARE_ENTRY_URL_PATTERNS: List[str] = [
+        r"https?://b23\.tv/[A-Za-z0-9]+(?:\?[^\s]*)?",
+        r"https?://(?:www\.)?bilibili\.com/opus/\d+(?:\?[^\s]*)?",
+        r"https?://(?:www\.)?bilibili\.com/video/(?:BV[a-zA-Z0-9]{10}|av\d+)(?:/|\?[^\s]*)?",
+        r"https?://m\.bilibili\.com/video/(?:BV[a-zA-Z0-9]{10}|av\d+)(?:/|\?[^\s]*)?",
+        r"https?://t\.bilibili\.com/\d+(?:\?[^\s]*)?",
+    ]
 
     @classmethod
     def find_share_entry_url(cls, text_or_url: str) -> str:
@@ -58,24 +86,43 @@ class BilibiliShareDownloadBase(object):
                 return match.group(0).rstrip(".,;)")
         raise AssertionError(f"未识别到 B 站分享链接; text: {text_or_url!r}")
 
+    @staticmethod
+    def parse_dynamic_id_from_url(url: str) -> Optional[str]:
+        match = re.search(r"t\.bilibili\.com/(\d+)", url, flags=re.IGNORECASE)
+        if match:
+            return match.group(1)
+        return None
+
+    def get_video_url_from_web_dynamic(self, dynamic_id: str, timeout: int = 30) -> Optional[str]:
+        js = self.get_web_dynamic(dynamic_id, timeout=timeout)
+        item = js["data"]["item"]
+
+        major_archive = item["modules"]["module_dynamic"]["major"].get("archive")
+        if not isinstance(major_archive, dict):
+            return None
+
+        bvid = major_archive.get("bvid")
+        if isinstance(bvid, str) and bvid:
+            return f"https://www.bilibili.com/video/{bvid}/"
+
+        for key in ("jump_url", "jump_uri", "url"):
+            url = major_archive.get(key)
+            if not isinstance(url, str) or not url:
+                continue
+            if url.startswith("//"):
+                url = "https:" + url
+            if re.search(r"bilibili\.com/video/(?:BV[a-zA-Z0-9]{10}|av\d+)", url, re.I):
+                return url
+        return None
+
     def classify_share_link(self, text_or_url: str, timeout: int = 30) -> Dict[str, str]:
-        """
-        判断分享入口跟跳后的落地类型：``video``（稿件视频页）或 ``opus``（图文动态页）。
-
-        返回字典字段：
-        - ``kind``: ``\"video\"`` 或 ``\"opus\"``
-        - ``entry_url``: 从文案解析出的入口 URL
-        - ``final_url``: HTTP 跟跳后的浏览器地址栏 URL
-
-        若命中验证码/风控页，抛出 ``AssertionError``。
-        """
         entry_url = self.find_share_entry_url(text_or_url)
         response = self.session.get(entry_url, allow_redirects=True, timeout=timeout)
         if response.status_code != 200:
             raise AssertionError(
                 f"classify_share_link 请求失败; status_code: {response.status_code}, url: {entry_url}"
             )
-        if self._looks_like_captcha_or_risk(response):
+        if self.looks_like_captcha_or_risk(response):
             raise AssertionError(
                 "链接落地为验证码或风控页，无法判断类型；请在浏览器完成验证后使用最终地址再试。"
             )
@@ -84,9 +131,27 @@ class BilibiliShareDownloadBase(object):
             return {"kind": "video", "entry_url": entry_url, "final_url": final_url}
         if re.search(r"bilibili\.com/opus/\d+", final_url, re.I):
             return {"kind": "opus", "entry_url": entry_url, "final_url": final_url}
+        dynamic_id = self.parse_dynamic_id_from_url(final_url)
+        if dynamic_id:
+            js = self.get_web_dynamic(dynamic_id, timeout=timeout)
+            item = js["data"]["item"]
+            item_type = item["type"]
+            major_type = item["modules"]["module_dynamic"]["major"]["type"]
+            major_archive = item["modules"]["module_dynamic"]["major"].get("archive")
+
+            if item_type == "DYNAMIC_TYPE_AV" or major_type == "MAJOR_TYPE_ARCHIVE" or major_archive:
+                video_url = self.get_video_url_from_web_dynamic(dynamic_id)
+                if not video_url:
+                    raise AssertionError(
+                        f"动态为视频类型但未解析到视频地址；dynamic_id: {dynamic_id}；final_url: {final_url}"
+                    )
+                return {"kind": "video", "entry_url": entry_url, "final_url": video_url}
+            else:
+                # DYNAMIC_TYPE_DRAW, MAJOR_TYPE_DRAW
+                return {"kind": "opus", "entry_url": entry_url, "final_url": final_url}
         raise AssertionError(
-            f"跟跳后无法归类为 video 或 opus: {final_url}；"
-            "当前仅识别 www.bilibili.com/video/… 与 www.bilibili.com/opus/… 落地页。"
+            f"跟跳后无法归类为 video 或 opus；\nfinal_url: {final_url}；\nentry_url: {entry_url}；\ntext_or_url: {text_or_url}；\n"
+            "当前仅识别 www.bilibili.com/video/…、www.bilibili.com/opus/… 与 t.bilibili.com/… 落地页。"
         )
 
     @staticmethod
@@ -98,7 +163,7 @@ class BilibiliShareDownloadBase(object):
         return name[:max_len]
 
     @staticmethod
-    def _looks_like_captcha_or_risk(response: requests.Response) -> bool:
+    def looks_like_captcha_or_risk(response: requests.Response) -> bool:
         text = response.text or ""
         u = (response.url or "").lower()
         if "passport.bilibili.com" in u or "/h5/project-verify" in u:
@@ -110,7 +175,7 @@ class BilibiliShareDownloadBase(object):
         return False
 
     @staticmethod
-    def _extract_initial_state_json(html: str) -> Optional[Dict[str, Any]]:
+    def extract_initial_state_json(html: str) -> Optional[Dict[str, Any]]:
         patterns = [
             r"__INITIAL_STATE__\s*=\s*(\{.+?\})\s*;\s*\(function",
             r"__INITIAL_STATE__\s*=\s*(\{.+?\})\s*;\s*</script>",
@@ -161,20 +226,11 @@ def main():
     """
     client = BilibiliShareDownloadBase()
 
-    share_text_video = "【示例】复制打开 https://b23.tv/4UwmGmu 观看视频"
-    share_text_opus = "动态示例 https://b23.tv/1uHyBhd"
-
-    print("=== find_share_entry_url ===")
-    print("video:", client.find_share_entry_url(share_text_video))
-    print("opus:", client.find_share_entry_url(share_text_opus))
-
-    print("\n=== classify_share_link ===")
-    for label, text in (("video", share_text_video), ("opus", share_text_opus)):
-        try:
-            info = client.classify_share_link(text)
-            print(f"{label}:", json.dumps(info, ensure_ascii=True, indent=2))
-        except AssertionError as exc:
-            print(f"{label} failed:", str(exc))
+    share_text = """
+    https://t.bilibili.com/1202874151861223426/
+    """
+    result = client.classify_share_link(share_text)
+    print(result)
 
 
 if __name__ == "__main__":

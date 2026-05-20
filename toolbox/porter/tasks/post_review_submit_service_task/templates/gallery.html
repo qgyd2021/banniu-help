@@ -138,7 +138,8 @@
     .imgs { display: flex; gap: 8px; min-height: 248px; }
     .thumb-wrap { position: relative; flex: 0 0 auto; }
     .thumb-btn { border: 0; padding: 0; background: transparent; cursor: zoom-in; position: relative; }
-    .imgs img, .imgs video { width: 330px; height: 248px; object-fit: cover; border-radius: 8px; background: #eee; flex: 0 0 auto; pointer-events: none; }
+    .imgs img, .video-thumb { width: 330px; height: 248px; object-fit: cover; border-radius: 8px; background: #eee; flex: 0 0 auto; pointer-events: none; }
+    .video-thumb { display: flex; align-items: flex-end; justify-content: center; padding-bottom: 18px; background: linear-gradient(135deg, #202838, #101722); color: rgba(255,255,255,.82); font-size: 13px; }
     .thumb-btn[data-media-type="video"]::after { content: '▶'; position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 36px; color: rgba(255,255,255,.85); text-shadow: 0 2px 8px rgba(0,0,0,.4); pointer-events: none; }
 
     .mark-btn {
@@ -410,7 +411,9 @@
                   data-index="{{ loop.index0 }}"
                   data-title="{{ row.title or '' }}"
                   data-mark-key="{{ row.platform }}::{{ row.task_id }}::{{ vid_url }}">
-                  <video src="{{ video_stream_url(vid_url, row.platform, row.share_url or '', loop.index0) }}" preload="metadata" muted playsinline></video>
+                  <div class="video-thumb" aria-label="video placeholder">
+                    <span>点击播放视频</span>
+                  </div>
                 </button>
               </div>
               {% endfor %}
@@ -606,7 +609,12 @@
     if (currentMediaType === 'video') {
       vImg.style.display = 'none';
       vVideo.style.display = 'block';
-      vVideo.src = item.src;
+      if (vVideo.src !== item.src) {
+        vVideo.pause();
+        vVideo.removeAttribute('src');
+        vVideo.load();
+        vVideo.src = item.src;
+      }
       vVideo.load();
       vVideo.currentTime = 0;
       vVideo.play().catch(err => { console.warn('Video play failed:', err.message, 'src:', vVideo.src); });
@@ -641,6 +649,8 @@
 
   function closeViewer() {
     vVideo.pause();
+    vVideo.removeAttribute('src');
+    vVideo.load();
     mask.classList.remove('show');
     mask.setAttribute('aria-hidden', 'true');
     document.body.style.overflow = '';

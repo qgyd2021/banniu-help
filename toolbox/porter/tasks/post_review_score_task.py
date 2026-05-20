@@ -214,14 +214,13 @@ class PostReviewOnlyFinal(BaseTask, TaskJsonUtils):
                     continue
 
                 post_review_final = PostReviewFinal.from_dict(post_review.review_final.model_dump())
-                if post_review_final.approved is None:
-                    post_review_final.approved_in_str = "待审核"
-                elif post_review_final.approved:
+                if post_review_final.approved:
                     post_review_final.approved_in_str = "已通过"
                 elif not post_review_final.approved:
                     post_review_final.approved_in_str = "未通过"
                 else:
-                    post_review_final.approved_in_str = "待审核"
+                    logger.info(f"{self.flag} 此任务只处理带有人工终审的Task，跳过: platform={platform}, source={source_dir.as_posix()}")
+                    continue
 
                 dst = target_dir / src.name
                 self.safe_move(src, dst)
