@@ -1,0 +1,11 @@
+[
+  {
+    "enable": true,
+    "type": "portal_server",
+    "check_interval": 60,
+    "registry_dir": "temp/",
+    "host": "0.0.0.0",
+    "port": 7000,
+    "title": "班牛审核服务入口"
+  }
+]

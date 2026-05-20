@@ -8,7 +8,7 @@ data/
 dotenv/
 examples/
 logs/
-porter_tasks/
+#porter_tasks/
 temp/
 trainede_models/
 
