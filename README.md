@@ -6,7 +6,7 @@
 ```
 
 ```text
-docker build -t banniu-help:v20260520_1143 .
+docker build -t banniu-help:v20260520_1150 .
 
 docker stop BanniuHelp && docker rm BanniuHelp
 
@@ -14,8 +14,8 @@ docker run -d \
 --name BanniuHelp \
 --network host \
 --restart always \
--v /home/honeytian/PycharmProjects/banniu-help:/code/temp \
-banniu-help:v20260520_1143
+-v /home/honeytian/PycharmProjects/banniu-help/temp:/code/temp \
+banniu-help:v20260520_1150
 
 
 ```
@@ -37,3 +37,13 @@ curl -X POST http://127.0.0.1:11434/v1/chat/completions \
 
 ```
 
+
+
+```text
+http://192.168.34.115:7860/
+
+
+http://192.168.34.115:7000/portal
+
+http://192.168.34.115:8001/gallery
+```

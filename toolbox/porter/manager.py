@@ -25,7 +25,7 @@ class PorterManager(object):
 
             if not enable:
                 continue
-            task_cls: type(BaseTask) = BaseTask.by_name(task_type)
+            task_cls: BaseTask = BaseTask.by_name(task_type)
             task_obj = task_cls(**task)
 
             coro_task_set.add(task_obj.start())

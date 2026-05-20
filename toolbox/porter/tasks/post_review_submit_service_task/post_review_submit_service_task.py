@@ -413,9 +413,20 @@ class PostReviewSubmitServiceTask(BaseTask, TaskJsonUtils):
         return app
 
     async def do_task(self):
-        logger.info(f"[{self.flag}] start post review submit service on http://{self.host}:{self.port}/gallery")
+        logger.info(f"{self.flag} start post review submit service on http://{self.host}:{self.port}/gallery")
         logger.info(f"{self.flag} service info file: {self.server_info_file.as_posix()}")
-        config = uvicorn.Config(app=self.app, host=self.host, port=self.port, reload=False, log_level="info")
+        for name in ("uvicorn", "uvicorn.error", "uvicorn.access"):
+            uv_logger = logging.getLogger(name)
+            uv_logger.handlers = []
+            for h in logging.getLogger("toolbox").handlers:
+                uv_logger.addHandler(h)
+            uv_logger.setLevel(logging.INFO)
+            uv_logger.propagate = False
+
+        config = uvicorn.Config(
+            app=self.app, host=self.host, port=self.port,
+            reload=False, log_level="info", log_config=None,
+        )
         server = uvicorn.Server(config)
         await server.serve()
 

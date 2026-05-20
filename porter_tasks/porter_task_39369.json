@@ -152,7 +152,7 @@
     "check_interval": 60,
     "source_dir": "temp/banniu_39369/step_5_3_post_review_text_tags_review",
     "target_dir": "temp/banniu_39369/step_6_post_review_submit",
-    "port": 8001,
+    "port": 18001,
     "service_registry_dir": "temp/banniu_39369/service_registry"
   },
   {
