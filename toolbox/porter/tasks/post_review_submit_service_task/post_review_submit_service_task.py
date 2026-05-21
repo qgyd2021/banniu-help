@@ -6,7 +6,7 @@ import logging
 import shutil
 import sys
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union
 
 import uvicorn
 from fastapi import FastAPI, HTTPException
@@ -15,7 +15,6 @@ from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 from starlette.requests import Request
 
-from project_settings import project_path
 from toolbox.porter.tasks.base_task import BaseTask, TaskJsonUtils
 from toolbox.porter.entity.banniu_task import BanniuTaskFormatted
 from toolbox.porter.entity.post_meta import PostMeta
@@ -36,18 +35,20 @@ from toolbox.kuaishou.utils.fresh_media_url import FreshVideoUrl as KuaishouFres
 from toolbox.dewu.utils.fresh_media_url import FreshVideoUrl as DewuFreshVideoUrl
 from toolbox.xiaoheihe.utils.fresh_media_url import FreshVideoUrl as XiaoHeiHeFreshVideoUrl
 
+from toolbox.porter.tasks.utils.post_review import PostReviewChecker
+
 logger = logging.getLogger("toolbox")
+
+
+class SubmitRowRequest(BaseModel):
+    source_file: str
+    media_marks: Optional[Dict[str, str]] = None
+    approved: Optional[bool] = None
+    reason: Optional[str] = ""
 
 
 @BaseTask.register("post_review_submit_service")
 class PostReviewSubmitServiceTask(BaseTask, TaskJsonUtils):
-    """帖子综合信息展示与审核提交服务。
-
-    将图片审核、视频审核的流程合并为一个综合审核页面，
-    让审核人员可以在一页上看到帖子的完整信息（标题、描述、作者、
-    点赞/评论/收藏/分享数、图片、视频等），直观判断帖子是否通过或被拒。
-    """
-
     def __init__(
         self,
         check_interval: int = 60,
@@ -60,6 +61,7 @@ class PostReviewSubmitServiceTask(BaseTask, TaskJsonUtils):
         service_name: str = "post_review_submit_service",
         service_access_path: str = "",
         service_description: str = "帖子综合审核服务，展示完整帖子信息（标题、描述、作者、互动数据、图片、视频），支持审核提交。",
+        post_review_checker_kwargs: Dict[str, Any] = None,
     ):
         super().__init__(flag=f"[{self.__class__.__name__}]", check_interval=check_interval)
         self.source_dir = self.resolve_project_path(source_dir)
@@ -72,7 +74,12 @@ class PostReviewSubmitServiceTask(BaseTask, TaskJsonUtils):
         self.service_access_path = str(service_access_path or "").strip()
         self.service_description = str(service_description or "").strip()
 
-        self._image_clients: Dict[str, Any] = {
+        self.post_review_checker_kwargs = post_review_checker_kwargs or {}
+        self.post_review_checker = PostReviewChecker(
+            **self.post_review_checker_kwargs
+        )
+
+        self.image_stream_client_map: Dict[str, Any] = {
             "bilibili": BilibiliFreshImageUrl(),
             "weibo": WeiboFreshImageUrl(),
             "xiaohongshu": XiaoHongShuFreshImageUrl(),
@@ -81,7 +88,7 @@ class PostReviewSubmitServiceTask(BaseTask, TaskJsonUtils):
             "dewu": DewuFreshImageUrl(),
             "xiaoheihe": XiaoHeiHeFreshImageUrl(),
         }
-        self._video_clients: Dict[str, Any] = {
+        self.video_stream_client_map: Dict[str, Any] = {
             "bilibili": BilibiliFreshVideoUrl(),
             "weibo": WeiboFreshVideoUrl(),
             "xiaohongshu": XiaoHongShuFreshVideoUrl(),
@@ -92,7 +99,10 @@ class PostReviewSubmitServiceTask(BaseTask, TaskJsonUtils):
         }
 
         self.server_info_file = self.register_service_info()
-        self.app = self._build_app()
+
+        self.app = FastAPI(title="Post Review Submit Service")
+        self.templates = Jinja2Templates(directory=self.templates_dir.as_posix())
+        self.add_router()
 
     def register_service_info(self) -> Path:
         registry_dir = self.service_registry_dir
@@ -157,6 +167,7 @@ class PostReviewSubmitServiceTask(BaseTask, TaskJsonUtils):
                 "review_status": task_formatted.review_status or "",
                 "task_status": task_formatted.task_status or "",
                 "flow_status": task_formatted.flow_status or "",
+                "order_no": task_formatted.order_no or "",
                 "final_approved_key": final_approved_key,
                 "share_url": post_meta.share_url,
                 "title": post_meta.title,
@@ -182,235 +193,270 @@ class PostReviewSubmitServiceTask(BaseTask, TaskJsonUtils):
         rows.sort(key=lambda x: (x["platform"], x["task_id"]))
         return rows
 
-    def _build_app(self) -> FastAPI:
-        app = FastAPI(title="Post Review Submit Service")
-        templates = Jinja2Templates(directory=self.templates_dir.as_posix())
-        task = self
+    def api_media_stream(
+        self,
+        request: Request,
+        url: str,
+        platform: str,
+        share_url: Optional[str] = None,
+        image_index: Optional[str] = None,
+        video_index: Optional[str] = None,
+        media_type: str = "image",
+    ):
+        """代理拉取图片或视频，根据平台调用对应的 FreshImageUrl/FreshVideoUrl 实现。"""
+        media_url = str(url or "").strip()
+        if not (media_url.startswith("http://") or media_url.startswith("https://")):
+            raise HTTPException(status_code=400, detail="invalid media url")
 
-        class SubmitRowRequest(BaseModel):
-            source_file: str
-            media_marks: Optional[Dict[str, str]] = None
-            # 仅随「保存图片/视频标注」一并提交；不能单独用这两项归档。
-            approved: Optional[bool] = None
-            reason: Optional[str] = ""
+        p = str(platform or "").strip().lower()
+        m_type = str(media_type or "image").strip().lower()
 
-        @app.get("/api/media-stream")
-        def api_media_stream(
-            request: Request,
-            url: str,
-            platform: str,
-            share_url: Optional[str] = None,
-            image_index: Optional[str] = None,
-            video_index: Optional[str] = None,
-            media_type: str = "image",
-        ):
-            """代理拉取图片或视频，根据平台调用对应的 FreshImageUrl/FreshVideoUrl 实现。"""
-            media_url = str(url or "").strip()
-            if not (media_url.startswith("http://") or media_url.startswith("https://")):
-                raise HTTPException(status_code=400, detail="invalid media url")
+        if m_type == "video":
+            client = self.video_stream_client_map.get(p)
+            if not client:
+                raise HTTPException(status_code=400, detail=f"unsupported platform for video: {platform}")
+            vid_idx = int(str(video_index or "0") or "0")
+            share = str(share_url or "").strip()
+            try:
+                response = client.ensure_video_url(
+                    video_url=media_url,
+                    video_index=vid_idx,
+                    share_url=share,
+                )
+            except Exception as e:
+                raise HTTPException(status_code=502, detail=f"upstream request failed: {e}") from e
+            media_type_out = response.headers.get("Content-Type") or "video/mp4"
+        else:
+            client = self.image_stream_client_map.get(p)
+            if not client:
+                raise HTTPException(status_code=400, detail=f"unsupported platform for image: {platform}")
+            img_idx = int(str(image_index or "0") or "0")
+            share = str(share_url or "").strip()
+            try:
+                response = client.ensure_image_url(
+                    image_url=media_url,
+                    image_index=img_idx,
+                    share_url=share,
+                )
+            except Exception as e:
+                raise HTTPException(status_code=502, detail=f"upstream request failed: {e}") from e
+            media_type_out = response.headers.get("Content-Type") or "image/jpeg"
 
-            p = str(platform or "").strip().lower()
-            m_type = str(media_type or "image").strip().lower()
+        if response.status_code not in (200, 206):
+            response.close()
+            raise HTTPException(status_code=response.status_code, detail="upstream response not ok")
 
-            if m_type == "video":
-                client = task._video_clients.get(p)
-                if not client:
-                    raise HTTPException(status_code=400, detail=f"unsupported platform for video: {platform}")
-                vid_idx = int(str(video_index or "0") or "0")
-                share = str(share_url or "").strip()
-                try:
-                    response = client.ensure_video_url(
-                        video_url=media_url,
-                        video_index=vid_idx,
-                        share_url=share,
-                    )
-                except Exception as e:
-                    raise HTTPException(status_code=502, detail=f"upstream request failed: {e}") from e
-                media_type_out = response.headers.get("Content-Type") or "video/mp4"
-            else:
-                client = task._image_clients.get(p)
-                if not client:
-                    raise HTTPException(status_code=400, detail=f"unsupported platform for image: {platform}")
-                img_idx = int(str(image_index or "0") or "0")
-                share = str(share_url or "").strip()
-                try:
-                    response = client.ensure_image_url(
-                        image_url=media_url,
-                        image_index=img_idx,
-                        share_url=share,
-                    )
-                except Exception as e:
-                    raise HTTPException(status_code=502, detail=f"upstream request failed: {e}") from e
-                media_type_out = response.headers.get("Content-Type") or "image/jpeg"
-
-            if response.status_code not in (200, 206):
+        def iter_chunks():
+            try:
+                for chunk in response.raw.stream(1024 * 128, decode_content=False):
+                    if chunk:
+                        yield chunk
+            finally:
                 response.close()
-                raise HTTPException(status_code=response.status_code, detail="upstream response not ok")
 
-            def iter_chunks():
-                try:
-                    for chunk in response.raw.stream(1024 * 128, decode_content=False):
-                        if chunk:
-                            yield chunk
-                finally:
-                    response.close()
+        resp_headers = {"Accept-Ranges": response.headers.get("Accept-Ranges", "bytes")}
+        for key in ("Content-Type", "Content-Length", "Content-Range", "Cache-Control", "ETag", "Last-Modified"):
+            value = response.headers.get(key)
+            if value:
+                resp_headers[key] = value
+        return StreamingResponse(
+            iter_chunks(), status_code=response.status_code, media_type=media_type_out, headers=resp_headers
+        )
 
-            resp_headers = {"Accept-Ranges": response.headers.get("Accept-Ranges", "bytes")}
-            for key in ("Content-Type", "Content-Length", "Content-Range", "Cache-Control", "ETag", "Last-Modified"):
-                value = response.headers.get(key)
-                if value:
-                    resp_headers[key] = value
-            return StreamingResponse(
-                iter_chunks(), status_code=response.status_code, media_type=media_type_out, headers=resp_headers
-            )
+    def resolve_source_file(self, source_file: str) -> Path:
+        """把请求里的 source_file 解析为 source_dir 之内的绝对路径，超出范围抛 400。"""
+        data_root = self.source_dir.resolve()
+        raw_src = Path(source_file)
+        src = (raw_src if raw_src.is_absolute() else (data_root / raw_src)).resolve()
+        try:
+            src.relative_to(data_root)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail="invalid source_file path") from exc
+        return src
 
-        @app.post("/api/submit-row")
-        def api_submit_row(payload: SubmitRowRequest) -> Dict[str, Any]:
-            data_root = task.source_dir.resolve()
-            step_target_root = task.target_dir.resolve()
-            raw_src = Path(payload.source_file)
-            src = (raw_src if raw_src.is_absolute() else (data_root / raw_src)).resolve()
-            try:
-                rel = src.relative_to(data_root)
-            except ValueError as exc:
-                raise HTTPException(status_code=400, detail="invalid source_file path") from exc
+    @staticmethod
+    def build_post_review_with_marks(
+        js: Dict[str, Any],
+        media_marks_raw: Optional[Dict[str, str]],
+        approved: Optional[bool],
+        reason: Optional[str],
+    ) -> PostReview:
+        """把前端传来的 media_marks / approved / reason 套到 PostReview 上，供 checker 使用或落盘。"""
+        raw_marks = media_marks_raw or {}
+        media_marks: Dict[str, str] = {}
+        for k, v in (raw_marks or {}).items():
+            if isinstance(k, str) and k:
+                mark_label = "" if v is None else str(v)
+                if mark_label not in ("符合", "不符合", ""):
+                    mark_label = str(v)
+                media_marks[k] = mark_label
 
-            target = step_target_root / rel
+        image_url_set: set[str] = set()
+        video_url_set: set[str] = set()
+        top_post_meta = js.get("post_meta")
+        if not isinstance(top_post_meta, dict):
+            raise HTTPException(status_code=400, detail="missing top-level post_meta")
+        if isinstance(top_post_meta.get("image_urls"), list):
+            for u in top_post_meta.get("image_urls") or []:
+                if isinstance(u, str) and u.startswith("http"):
+                    image_url_set.add(u)
+        if isinstance(top_post_meta.get("video_urls"), list):
+            for u in top_post_meta.get("video_urls") or []:
+                if isinstance(u, str) and u.startswith("http"):
+                    video_url_set.add(u)
 
-            # 用「是否为 None」区分：未传 media_marks 键则为 None。
-            do_media = payload.media_marks is not None
-            if not do_media:
-                raise HTTPException(status_code=400, detail="请提交 media_marks（保存图片/视频标注）")
+        image_marks: Dict[str, str] = {}
+        video_marks: Dict[str, str] = {}
+        for url, label in media_marks.items():
+            if url in image_url_set:
+                image_marks[url] = label
+            elif url in video_url_set:
+                video_marks[url] = label
 
-            # 仅在「源文件已不存在」时视为已归档；避免目标目录残留同名文件导致无法保存标注。
-            if not src.exists() or not src.is_file():
-                if target.exists() and target.is_file():
-                    return {
-                        "ok": True,
-                        "already_submitted": True,
-                        "source_file": src.as_posix(),
-                        "target_file": target.as_posix(),
-                    }
-                raise HTTPException(status_code=404, detail=f"source file not found: {src.as_posix()}")
+        def _count_marks(url_set: set[str], marks: Dict[str, str]) -> tuple[int, int, int]:
+            """返回 (total, check_count, cross_count)；未标记默认视为“符合”。"""
+            total = len(url_set)
+            cross_count = sum(1 for u in url_set if marks.get(u) == "不符合")
+            check_count = total - cross_count
+            return total, check_count, cross_count
 
-            try:
-                with open(src.as_posix(), "r", encoding="utf-8") as f:
-                    js = json.load(f)
-            except Exception as exc:
-                raise HTTPException(status_code=400, detail=f"source file is not valid json: {exc}") from exc
-            if not isinstance(js, dict):
-                raise HTTPException(status_code=400, detail="source file is not valid json object")
+        img_total, img_check, img_cross = _count_marks(image_url_set, image_marks)
+        vid_total, vid_check, vid_cross = _count_marks(video_url_set, video_marks)
 
-            raw_marks = payload.media_marks or {}
-            media_marks: Dict[str, str] = {}
-            for k, v in (raw_marks or {}).items():
-                if isinstance(k, str) and k:
-                    mark_label = "" if v is None else str(v)
-                    if mark_label not in ("符合", "不符合", ""):
-                        mark_label = str(v)
-                    media_marks[k] = mark_label
+        post_review = PostReview.from_dict(js.get("post_review", dict()))
+        post_review.review_image.total_count = img_total
+        post_review.review_image.check_count = img_check
+        post_review.review_image.cross_count = img_cross
+        post_review.review_image.marks = image_marks
 
-            # 基于文件内 post_meta 的媒体清单，把 marks 拆分到图片/视频字段中，保持与 pretty 任务一致的结构。
-            image_url_set: set[str] = set()
-            video_url_set: set[str] = set()
+        post_review.review_video.total_count = vid_total
+        post_review.review_video.check_count = vid_check
+        post_review.review_video.cross_count = vid_cross
+        post_review.review_video.marks = video_marks
 
-            top_post_meta = js.get("post_meta")
-            if not isinstance(top_post_meta, dict):
-                raise HTTPException(status_code=400, detail="missing top-level post_meta")
-            if isinstance(top_post_meta.get("image_urls"), list):
-                for u in top_post_meta.get("image_urls") or []:
-                    if isinstance(u, str) and u.startswith("http"):
-                        image_url_set.add(u)
-            if isinstance(top_post_meta.get("video_urls"), list):
-                for u in top_post_meta.get("video_urls") or []:
-                    if isinstance(u, str) and u.startswith("http"):
-                        video_url_set.add(u)
+        if approved is not None:
+            post_review.review_final.approved = approved
+            post_review.review_final.reply_to_user = str(reason or "").strip()
 
-            image_marks: Dict[str, str] = {}
-            video_marks: Dict[str, str] = {}
-            for url, label in media_marks.items():
-                if url in image_url_set:
-                    image_marks[url] = label
-                elif url in video_url_set:
-                    video_marks[url] = label
-                else:
-                    pass
+        return post_review
 
-            # 将提交标记写回 post_review.review_image / post_review.review_video
-            # 风格参考 post_review_text_tags_review_task.py：PostReview.from_dict → 修改字段 → to_dict 回写。
-            post_review = PostReview.from_dict(js.get("post_review", dict()))
+    def api_post_review_check(self, payload: SubmitRowRequest) -> Dict[str, Any]:
+        """根据当前界面上的 marks/approved/reason，调用 PostReviewChecker 给出实时审核结果。
 
-            def _count_marks(url_set: set[str], marks: Dict[str, str]) -> tuple[int, int, int]:
-                """返回 (total, check_count, cross_count)；未标记默认视为“符合”。"""
-                total = len(url_set)
-                cross_count = 0
-                for u in url_set:
-                    if marks.get(u) == "不符合":
-                        cross_count += 1
-                check_count = total - cross_count
-                return total, check_count, cross_count
+        与 ``api_submit_row`` 不同：本接口不写文件、不归档，仅返回是否会通过审核以及失败原因。
+        """
+        src = self.resolve_source_file(payload.source_file)
+        if not src.exists() or not src.is_file():
+            raise HTTPException(status_code=404, detail=f"source file not found: {src.as_posix()}")
 
-            img_total, img_check, img_cross = _count_marks(image_url_set, image_marks)
-            vid_total, vid_check, vid_cross = _count_marks(video_url_set, video_marks)
+        try:
+            with open(src.as_posix(), "r", encoding="utf-8") as f:
+                js = json.load(f)
+        except Exception as exc:
+            raise HTTPException(status_code=400, detail=f"source file is not valid json: {exc}") from exc
+        if not isinstance(js, dict):
+            raise HTTPException(status_code=400, detail="source file is not valid json object")
 
-            post_review.review_image.total_count = img_total
-            post_review.review_image.check_count = img_check
-            post_review.review_image.cross_count = img_cross
-            post_review.review_image.marks = image_marks
+        post_review = self.build_post_review_with_marks(
+            js=js,
+            media_marks_raw=payload.media_marks,
+            approved=payload.approved,
+            reason=payload.reason,
+        )
 
-            post_review.review_video.total_count = vid_total
-            post_review.review_video.check_count = vid_check
-            post_review.review_video.cross_count = vid_cross
-            post_review.review_video.marks = video_marks
+        result = self.post_review_checker.predict(post_review)
+        return {
+            "ok": True,
+            "approval": bool(result.get("approval", False)),
+            "review_msg": result.get("review_msg", {}) or {},
+        }
 
-            if payload.approved is not None:
-                post_review.review_final.approved = payload.approved
-                post_review.review_final.reply_to_user = str(payload.reason or "").strip()
+    def api_submit_row(self, payload: SubmitRowRequest) -> Dict[str, Any]:
+        data_root = self.source_dir.resolve()
+        step_target_root = self.target_dir.resolve()
+        src = self.resolve_source_file(payload.source_file)
+        rel = src.relative_to(data_root)
 
-            js["post_review"] = post_review.to_dict()
+        target = step_target_root / rel
 
-            src.write_text(json.dumps(js, ensure_ascii=False, indent=2), encoding="utf-8")
+        # 用「是否为 None」区分：未传 media_marks 键则为 None。
+        do_media = payload.media_marks is not None
+        if not do_media:
+            raise HTTPException(status_code=400, detail="请提交 media_marks（保存图片/视频标注）")
 
-            target.parent.mkdir(parents=True, exist_ok=True)
-            shutil.move(src.as_posix(), target.as_posix())
-            return {
-                "ok": True,
-                "moved": True,
-                "saved_media": True,
-                "saved_review_final": payload.approved is not None,
-                "source_file": src.as_posix(),
-                "target_file": target.as_posix(),
-            }
+        # 仅在「源文件已不存在」时视为已归档；避免目标目录残留同名文件导致无法保存标注。
+        if not src.exists() or not src.is_file():
+            if target.exists() and target.is_file():
+                return {
+                    "ok": True,
+                    "already_submitted": True,
+                    "source_file": src.as_posix(),
+                    "target_file": target.as_posix(),
+                }
+            raise HTTPException(status_code=404, detail=f"source file not found: {src.as_posix()}")
 
-        @app.get("/", response_class=HTMLResponse)
-        @app.get("/gallery", response_class=HTMLResponse)
-        def gallery_page(request: Request) -> HTMLResponse:
-            rows = task.collect_post_rows()
+        try:
+            with open(src.as_posix(), "r", encoding="utf-8") as f:
+                js = json.load(f)
+        except Exception as exc:
+            raise HTTPException(status_code=400, detail=f"source file is not valid json: {exc}") from exc
+        if not isinstance(js, dict):
+            raise HTTPException(status_code=400, detail="source file is not valid json object")
 
-            def _uniq(field: str) -> List[str]:
-                seen: set[str] = set()
-                out: List[str] = []
-                for r in rows:
-                    s = str(r.get(field) or "").strip()
-                    if s and s not in seen:
-                        seen.add(s)
-                        out.append(s)
-                return sorted(out)
+        post_review = self.build_post_review_with_marks(
+            js=js,
+            media_marks_raw=payload.media_marks,
+            approved=payload.approved,
+            reason=payload.reason,
+        )
+        js["post_review"] = post_review.to_dict()
 
-            return templates.TemplateResponse(
-                request=request,
-                name="gallery.html",
-                context={
-                    "rows": rows,
-                    "data_dir": task.source_dir.as_posix(),
-                    "count": len(rows),
-                    "product_models": _uniq("product_model"),
-                    "review_statuses": _uniq("review_status"),
-                    "task_statuses": _uniq("task_status"),
-                },
-            )
+        src.write_text(json.dumps(js, ensure_ascii=False, indent=2), encoding="utf-8")
 
-        return app
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.move(src.as_posix(), target.as_posix())
+        return {
+            "ok": True,
+            "moved": True,
+            "saved_media": True,
+            "saved_review_final": payload.approved is not None,
+            "source_file": src.as_posix(),
+            "target_file": target.as_posix(),
+        }
+
+    def gallery_page(self, request: Request) -> HTMLResponse:
+        rows = self.collect_post_rows()
+
+        def _uniq(field: str) -> List[str]:
+            seen: set[str] = set()
+            out: List[str] = []
+            for r in rows:
+                s = str(r.get(field) or "").strip()
+                if s and s not in seen:
+                    seen.add(s)
+                    out.append(s)
+            return sorted(out)
+
+        return self.templates.TemplateResponse(
+            request=request,
+            name="gallery.html",
+            context={
+                "rows": rows,
+                "data_dir": self.source_dir.as_posix(),
+                "count": len(rows),
+                "product_models": _uniq("product_model"),
+                "review_statuses": _uniq("review_status"),
+                "task_statuses": _uniq("task_status"),
+            },
+        )
+
+    def add_router(self) -> FastAPI:
+        self.app.add_api_route("/", self.gallery_page, methods=["GET"], response_class=HTMLResponse)
+        self.app.add_api_route("/gallery", self.gallery_page, methods=["GET"], response_class=HTMLResponse)
+        self.app.add_api_route("/api/media-stream", self.api_media_stream, methods=["GET"])
+        self.app.add_api_route("/api/submit-row", self.api_submit_row, methods=["POST"])
+        self.app.add_api_route("/api/post-review-check", self.api_post_review_check, methods=["POST"])
+        return self.app
 
     async def do_task(self):
         logger.info(f"{self.flag} start post review submit service on http://{self.host}:{self.port}/gallery")

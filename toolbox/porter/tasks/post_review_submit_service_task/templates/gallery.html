@@ -180,6 +180,41 @@
     .final-btn:hover { background: #f5f5f5; }
     .final-btn.pass.active { border-color: #52c41a; background: #52c41a; color: #fff; }
     .final-btn.reject.active { border-color: #ff4d4f; background: #ff4d4f; color: #fff; }
+    .final-suggest-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin-top: 4px;
+      min-height: 12px;
+    }
+    .final-suggest {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 12px;
+      color: transparent;
+      user-select: none;
+    }
+    .final-suggest .triangle {
+      width: 0; height: 0;
+      border-left: 6px solid transparent;
+      border-right: 6px solid transparent;
+      border-bottom: 8px solid currentColor;
+      animation: suggestBounce 1.1s ease-in-out infinite;
+    }
+    .final-suggest .check-mark {
+      font-size: 13px;
+      font-weight: 700;
+      line-height: 1;
+    }
+    .final-suggest.show.pass { color: #52c41a; }
+    .final-suggest.show.reject { color: #ff4d4f; }
+    .final-suggest.matched { opacity: 0.55; }
+    .final-suggest.matched .triangle { animation: none; }
+    @keyframes suggestBounce {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(-3px); }
+    }
     .review-reason {
       width: 100%; min-height: 72px; margin-top: 4px; padding: 8px 10px;
       border: 1px solid #d9d9d9; border-radius: 8px; font-size: 12px; line-height: 1.5;
@@ -202,6 +237,37 @@
     }
     .save-media-btn:hover { background: #0958d9; }
     .save-media-btn:disabled { background: #8fb8ff; cursor: not-allowed; }
+
+    .auto-check {
+      margin-top: 4px;
+      border: 1px solid #e6e6e6;
+      border-radius: 8px;
+      background: #fafafa;
+      padding: 8px 10px;
+      font-size: 12px;
+      line-height: 1.5;
+    }
+    .auto-check-head {
+      display: flex; align-items: center; justify-content: space-between; gap: 8px;
+    }
+    .auto-check-label { font-weight: 600; color: #606266; }
+    .auto-check-result {
+      display: inline-block; padding: 2px 8px; border-radius: 999px;
+      font-size: 12px; font-weight: 600;
+      background: #f0f0f0; color: #595959;
+    }
+    .auto-check-result.pass { background: #f6ffed; color: #389e0d; border: 1px solid #b7eb8f; }
+    .auto-check-result.reject { background: #fff2f0; color: #cf1322; border: 1px solid #ffccc7; }
+    .auto-check-result.pending { background: #f0f5ff; color: #2f54eb; border: 1px solid #adc6ff; }
+    .auto-check-result.error { background: #fffbe6; color: #ad6800; border: 1px solid #ffe58f; }
+    .auto-check-msgs {
+      margin: 6px 0 0; padding-left: 18px; color: #555;
+    }
+    .auto-check-msgs:empty { display: none; }
+    .auto-check-msgs li { margin: 2px 0; }
+    .auto-check-empty { color: #8c8c8c; margin-top: 6px; }
+    .auto-check.pass-banner { background: #f6ffed; border-color: #b7eb8f; }
+    .auto-check.reject-banner { background: #fff2f0; border-color: #ffccc7; }
 
     .back-top { position: fixed; right: 70px; bottom: 70px; width: 92px; height: 92px; border: 0; border-radius: 999px; background: rgba(17,23,34,.85); color: #fff; font-size: 40px; cursor: pointer; display: none; align-items: center; justify-content: center; z-index: 999; box-shadow: 0 4px 14px rgba(0,0,0,.25); }
     .back-top.show { display: flex; }
@@ -352,6 +418,7 @@
             <div class="task-meta-row">
               <span class="task-id">task_id: {{ row.task_id }}</span>
               <span class="task-meta-inline">产品型号：{{ row.product_model or '-' }}</span>
+              <span class="task-meta-inline">订单号：{{ row.order_no or '-' }}</span>
               <span class="task-meta-inline">创建时间：{{ row.created_at or '-' }}</span>
               <span class="task-meta-inline">任务状态：{{ row.task_status or '-' }}</span>
               <span class="task-meta-inline">流程状态：{{ row.flow_status or '-' }}</span>
@@ -441,9 +508,29 @@
           <button type="button" class="final-btn pass" data-approved="true">审核通过</button>
           <button type="button" class="final-btn reject" data-approved="false">审核不通过</button>
         </div>
+        <div class="final-suggest-row" data-final-suggest>
+          <div class="final-suggest" data-final-suggest-slot="true"></div>
+          <div class="final-suggest" data-final-suggest-slot="false"></div>
+        </div>
 
         <div class="side-label">备注（回复用户）</div>
         <textarea class="review-reason" placeholder="填写审核意见或驳回原因…">{{ rf.reply_to_user or '' }}</textarea>
+
+        <button class="save-media-btn" type="button" data-source-file="{{ row.source_file }}">保存图片/视频标注</button>
+        <div style="font-size: 11px; color: #8c8c8c; margin-top: 6px; line-height: 1.45;">未标记的媒体默认为「符合」；</div>
+        {% if row.share_url %}
+        <div class="link" style="margin-top: 6px;">分享链接：<a href="{{ row.share_url }}" target="_blank" rel="noopener noreferrer">{{ row.share_url[:60] }}{% if row.share_url|length > 60 %}...{% endif %}</a></div>
+        {% endif %}
+
+        <div class="side-label">自动审核预测</div>
+        <div class="auto-check" data-auto-check>
+          <div class="auto-check-head">
+            <span class="auto-check-label">当前预测</span>
+            <span class="auto-check-result pending" data-auto-check-result>等待检查…</span>
+          </div>
+          <ul class="auto-check-msgs" data-auto-check-msgs></ul>
+          <div class="auto-check-empty" data-auto-check-empty style="display: none;">无问题，预计将通过审核</div>
+        </div>
 
         <details class="review-panel">
           <summary>审核信息（自动）</summary>
@@ -477,12 +564,6 @@
             </div>
           </div>
         </details>
-
-        <button class="save-media-btn" type="button" data-source-file="{{ row.source_file }}">保存图片/视频标注</button>
-        {% if row.share_url %}
-        <div class="link" style="margin-top: 10px;">分享链接：<a href="{{ row.share_url }}" target="_blank" rel="noopener noreferrer">{{ row.share_url[:60] }}{% if row.share_url|length > 60 %}...{% endif %}</a></div>
-        {% endif %}
-        <div style="font-size: 11px; color: #8c8c8c; margin-top: 6px; line-height: 1.45;">未标记的媒体默认为「符合」；保存后归档到下一步</div>
       </div>
     </section>
 
@@ -614,6 +695,183 @@
     vGoodBadge.classList.toggle('show', isGood);
   }
 
+  const checkTimers = new WeakMap();
+  const checkAbortControllers = new WeakMap();
+  const checkedRows = new WeakSet();
+
+  function findRowByMarkKey(markKey) {
+    if (!markKey) return null;
+    const item = flatList.find(x => x.markKey === markKey);
+    if (!item || !item.rowSource) return null;
+    return document.querySelector(`#rowsContainer .row[data-source-file="${CSS.escape(item.rowSource)}"]`);
+  }
+
+  function clearFinalSuggest(rowEl) {
+    if (!rowEl) return;
+    rowEl.querySelectorAll('[data-final-suggest-slot]').forEach((slot) => {
+      slot.classList.remove('show', 'pass', 'reject', 'matched');
+      slot.innerHTML = '';
+      slot.removeAttribute('title');
+    });
+    delete rowEl.dataset.autoCheckSuggest;
+  }
+
+  function applyFinalSuggest(rowEl, approval) {
+    if (!rowEl) return;
+    const passSlot = rowEl.querySelector('[data-final-suggest-slot="true"]');
+    const rejectSlot = rowEl.querySelector('[data-final-suggest-slot="false"]');
+    [passSlot, rejectSlot].forEach((slot) => {
+      if (!slot) return;
+      slot.classList.remove('show', 'pass', 'reject', 'matched');
+      slot.innerHTML = '';
+      slot.removeAttribute('title');
+    });
+    const target = approval ? passSlot : rejectSlot;
+    if (!target) return;
+    target.classList.add('show', approval ? 'pass' : 'reject');
+    target.innerHTML = '<span class="triangle"></span>';
+    target.title = '自动审核建议点这里';
+    rowEl.dataset.autoCheckSuggest = approval ? 'true' : 'false';
+    syncFinalSuggestMatched(rowEl);
+  }
+
+  function syncFinalSuggestMatched(rowEl) {
+    if (!rowEl) return;
+    const suggest = rowEl.dataset.autoCheckSuggest || '';
+    if (!suggest) return;
+    const picked = rowEl.dataset.finalApproved || '';
+    rowEl.querySelectorAll('[data-final-suggest-slot]').forEach((slot) => {
+      const slotVal = slot.dataset.finalSuggestSlot || '';
+      if (slotVal !== suggest) return;
+      const matched = picked === suggest;
+      slot.classList.toggle('matched', matched);
+      slot.innerHTML = matched
+        ? '<span class="check-mark">✓</span>'
+        : '<span class="triangle"></span>';
+      slot.title = matched ? '已采纳自动审核建议' : '自动审核建议点这里';
+    });
+  }
+
+  function renderAutoCheck(rowEl, state) {
+    if (!rowEl) return;
+    const wrap = rowEl.querySelector('[data-auto-check]');
+    const result = rowEl.querySelector('[data-auto-check-result]');
+    const msgs = rowEl.querySelector('[data-auto-check-msgs]');
+    const empty = rowEl.querySelector('[data-auto-check-empty]');
+    if (!wrap || !result || !msgs || !empty) return;
+
+    wrap.classList.remove('pass-banner', 'reject-banner');
+    result.classList.remove('pass', 'reject', 'pending', 'error');
+    msgs.innerHTML = '';
+    empty.style.display = 'none';
+
+    if (state.status === 'loading') {
+      result.classList.add('pending');
+      result.textContent = '检查中…';
+      return;
+    }
+    if (state.status === 'error') {
+      result.classList.add('error');
+      result.textContent = '检查失败';
+      const li = document.createElement('li');
+      li.textContent = state.message || '未知错误';
+      msgs.appendChild(li);
+      clearFinalSuggest(rowEl);
+      return;
+    }
+
+    const approval = !!state.approval;
+    const reasons = state.review_msg || {};
+    const entries = Object.entries(reasons);
+
+    if (approval) {
+      wrap.classList.add('pass-banner');
+      result.classList.add('pass');
+      result.textContent = '将通过';
+    } else {
+      wrap.classList.add('reject-banner');
+      result.classList.add('reject');
+      result.textContent = '将不通过';
+    }
+    if (entries.length === 0) {
+      empty.style.display = approval ? 'block' : 'none';
+    } else {
+      entries.forEach(([k, v]) => {
+        const li = document.createElement('li');
+        li.textContent = String(v);
+        li.dataset.checkKey = k;
+        msgs.appendChild(li);
+      });
+    }
+    applyFinalSuggest(rowEl, approval);
+  }
+
+  async function runAutoCheck(rowEl) {
+    if (!rowEl) return;
+    const sourceFile = rowEl.dataset.sourceFile || '';
+    if (!sourceFile) return;
+
+    const prevCtrl = checkAbortControllers.get(rowEl);
+    if (prevCtrl) { try { prevCtrl.abort(); } catch (_) {} }
+    const ctrl = new AbortController();
+    checkAbortControllers.set(rowEl, ctrl);
+
+    renderAutoCheck(rowEl, { status: 'loading' });
+
+    const finalVal = rowEl.dataset.finalApproved || '';
+    const body = {
+      source_file: sourceFile,
+      media_marks: collectMediaMarks(rowEl),
+    };
+    if (finalVal === 'true') {
+      body.approved = true;
+      body.reason = (rowEl.querySelector('.review-reason')?.value || '').trim();
+    } else if (finalVal === 'false') {
+      body.approved = false;
+      body.reason = (rowEl.querySelector('.review-reason')?.value || '').trim();
+    }
+
+    try {
+      const resp = await fetch('/api/post-review-check', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+        signal: ctrl.signal,
+      });
+      const data = await resp.json();
+      if (!resp.ok || !data?.ok) {
+        const detail = typeof data?.detail === 'string' ? data.detail : JSON.stringify(data?.detail || data);
+        throw new Error(detail || '检查失败');
+      }
+      checkedRows.add(rowEl);
+      renderAutoCheck(rowEl, {
+        status: 'ok',
+        approval: !!data.approval,
+        review_msg: data.review_msg || {},
+      });
+    } catch (err) {
+      if (err && err.name === 'AbortError') return;
+      renderAutoCheck(rowEl, { status: 'error', message: err?.message || String(err) });
+    }
+  }
+
+  function scheduleAutoCheck(rowEl, delay = 350) {
+    if (!rowEl) return;
+    const prev = checkTimers.get(rowEl);
+    if (prev) clearTimeout(prev);
+    const t = setTimeout(() => {
+      checkTimers.delete(rowEl);
+      runAutoCheck(rowEl);
+    }, delay);
+    checkTimers.set(rowEl, t);
+  }
+
+  function ensureAutoCheckedOnce(rowEl) {
+    if (!rowEl || checkedRows.has(rowEl)) return;
+    checkedRows.add(rowEl);
+    scheduleAutoCheck(rowEl, 50);
+  }
+
   function renderViewer() {
     const item = flatList[currentIdx];
     if (!item) return;
@@ -682,6 +940,7 @@
       else { badSet.add(key); goodSet.delete(key); }
       saveMarks();
       syncMarks();
+      scheduleAutoCheck(btn.closest('.row'));
     });
   });
 
@@ -721,6 +980,7 @@
     else { badSet.add(key); goodSet.delete(key); }
     saveMarks();
     syncMarks();
+    scheduleAutoCheck(findRowByMarkKey(key));
   });
 
   btnPrev.addEventListener('click', prev);
@@ -745,6 +1005,7 @@
       else { goodSet.add(key); badSet.delete(key); }
       saveMarks();
       syncMarks();
+      scheduleAutoCheck(findRowByMarkKey(key));
     } else if (e.key === 'Backspace') {
       e.preventDefault();
       const key = flatList[currentIdx]?.markKey || '';
@@ -753,6 +1014,7 @@
       else { badSet.add(key); goodSet.delete(key); }
       saveMarks();
       syncMarks();
+      scheduleAutoCheck(findRowByMarkKey(key));
     }
   });
 
@@ -860,6 +1122,7 @@
       if (shown < paginateLimit) {
         row.classList.remove('paginate-hidden');
         revealImagesInRow(row);
+        ensureAutoCheckedOnce(row);
         shown += 1;
       } else {
         row.classList.add('paginate-hidden');
@@ -968,6 +1231,18 @@
       const val = btn.dataset.approved || '';
       rowEl.dataset.finalApproved = rowEl.dataset.finalApproved === val ? '' : val;
       syncFinalButtons(rowEl);
+      syncFinalSuggestMatched(rowEl);
+      scheduleAutoCheck(rowEl);
+    });
+  });
+
+  document.querySelectorAll('.review-reason').forEach((ta) => {
+    ta.addEventListener('input', () => {
+      const rowEl = ta.closest('.row');
+      if (!rowEl) return;
+      const finalVal = rowEl.dataset.finalApproved || '';
+      // 只有在选了“审核不通过”时，备注才会进入 checker 的判定（review_final 信息），其他情况下重跑无意义。
+      if (finalVal === 'false') scheduleAutoCheck(rowEl, 700);
     });
   });
 

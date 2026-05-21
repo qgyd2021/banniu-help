@@ -470,12 +470,12 @@ def main():
     # share_text = """"
 # https://t.bilibili.com/1202874151861223426?from_spmid=dt.dt.0.0.pv&plat_id=493&share_from=dynamic&share_medium=android&share_plat=android&share_session_id=2a8ae822-79c3-40bc-9ede-c2737b7de2e8&share_source=COPY&share_tag=s_i&spmid=dt.dt.0.0&timestamp=1778904366&unique_k=njmyI6r
 #     """
-#     share_text = """"
-# https://b23.tv/oBke03t
-#     """
     share_text = """"
-https://b23.tv/6UGNFEQ
+https://b23.tv/oBke03t
     """
+    # share_text = """"
+# https://b23.tv/6UGNFEQ
+#     """
     try:
         meta = client.get_opus_meta_by_share_text(share_text)
         print(json.dumps(meta, ensure_ascii=False, indent=2))

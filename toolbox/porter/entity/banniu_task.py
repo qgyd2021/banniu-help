@@ -31,7 +31,8 @@ class BanniuTaskFormatted(BaseModel):
     receiver_name_for_query: Optional[str] = Field(default=None, alias="收货人（用于查询）")
     phone_for_cs_query: Optional[str] = Field(default=None, alias="手机号（用于客服查询）")
     phone_for_fill_query: Optional[str] = Field(default=None, alias="手机号码（用于填写/查询）")
-    order_no: Optional[str] = Field(default=None, alias="工单编号")
+    order_work_no: Optional[str] = Field(default=None, alias="工单编号")
+    order_no: Optional[str] = Field(default=None, alias="订单号")
 
     sync_status: Optional[str] = Field(default=None, alias="同步状态")
     review_status: Optional[str] = Field(default=None, alias="审核状态")

@@ -153,7 +153,16 @@
     "source_dir": "temp/banniu_39369/step_5_3_post_review_text_tags_review",
     "target_dir": "temp/banniu_39369/step_6_post_review_submit",
     "port": 18001,
-    "service_registry_dir": "temp/banniu_39369/service_registry"
+    "service_registry_dir": "temp/banniu_39369/service_registry",
+    "post_review_checker_kwargs": {
+      "positive_emotion_labels": ["积极"],
+      "min_total_text_length": 30,
+      "required_tags": ["迈从"],
+      "min_image_count": 3,
+      "max_image_cross_rate": 0.4,
+      "min_video_count": 1,
+      "max_video_cross_rate": 0.5
+    }
   },
   {
     "enable": false,
