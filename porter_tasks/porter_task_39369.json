@@ -3,7 +3,7 @@
     "enable": true,
     "type": "banniu_task_download",
     "project_id": "39369",
-    "check_interval": 3600,
+    "check_interval": 60,
     "output_dir": "temp/banniu_39369/step_1_banniu_task_download/tasks",
     "last_fetch_tasks": "temp/banniu_39369/step_1_banniu_task_download/last_fetch_tasks.json",
     "last_fetch_time_txt": "temp/banniu_39369/step_1_banniu_task_download/last_fetch_time.txt"
