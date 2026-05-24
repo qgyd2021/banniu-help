@@ -1,7 +1,7 @@
 #!/usr/bin/python3
 # -*- coding: utf-8 -*-
 import json
-from typing import List, Tuple, Optional
+from typing import Dict, List, Tuple, Optional
 
 from toolbox.porter.entity.post_review import PostReview
 
@@ -11,7 +11,7 @@ class PostReviewChecker(object):
         self,
         positive_emotion_labels: List[str] = None,
         min_total_text_length: int = 0,
-        required_tags: List[str] = None,
+        required_tags_dict: Dict[str, List[str]] = None,
         min_image_count: int = 0,
         max_image_cross_rate: float = 0.0,
         min_video_count: int = 0,
@@ -20,14 +20,13 @@ class PostReviewChecker(object):
     ):
         self.positive_emotion_labels = positive_emotion_labels or ["积极"]
         self.min_total_text_length = int(min_total_text_length)
-        self.required_tags = required_tags or list()
+        self.required_tags_dict = required_tags_dict or dict()
         self.min_image_count = int(min_image_count)
         self.max_image_cross_rate = float(max_image_cross_rate)
         self.min_video_count = int(min_video_count)
         self.max_video_cross_rate = float(max_video_cross_rate)
 
-    def predict(self, post_review: PostReview) -> dict:
-
+    def predict(self, post_review: PostReview, product_model: str = "") -> dict:
         review_msg = dict()
         duplicate_task_ids = post_review.review_duplicate.duplicate_task_ids or []
         if len(duplicate_task_ids) > 0:
@@ -44,7 +43,8 @@ class PostReviewChecker(object):
             review_msg["text_length"] = f"标题和描述的总字数太少；总长度：{total_length}，最小长应：{self.min_total_text_length}。"
 
         tags_match = post_review.review_text.tags_match or []
-        tags_miss = [tag for tag in self.required_tags if tag not in tags_match]
+        required_tags = self.required_tags_dict.get(product_model, [])
+        tags_miss = [tag for tag in required_tags if tag not in tags_match]
         if len(tags_miss) > 0:
             review_msg["tags_miss"] = f"缺少标签：{'，'.join(tags_miss)}。"
 
@@ -167,14 +167,14 @@ def main():
     post_review_checker = PostReviewChecker(
         positive_emotion_labels=["积极"],
         min_total_text_length=40,
-        required_tags=["迈从"],
+        required_tags_dict={"A7V2": ["迈从"]},
         min_image_count=3,
         max_image_cross_rate=0.4,
         min_video_count=1,
         max_video_cross_rate=0.5
     )
 
-    result = post_review_checker.predict(post_review)
+    result = post_review_checker.predict(post_review, product_model="A7V2")
     print(result)
     print(json.dumps(result, ensure_ascii=False, indent=2))
     return

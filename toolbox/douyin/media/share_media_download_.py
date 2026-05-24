@@ -148,6 +148,7 @@ class ShareMediaDownload(ShareMediaDownloadRestful):
 
         post_meta = None
         for url in dict.fromkeys(candidate_urls):
+            # print(f"url: {url}")
             router_data = self.get_router_data_by_final_url(url)
             if len(router_data) == 0:
                 continue
@@ -177,6 +178,7 @@ class ShareMediaDownload(ShareMediaDownloadRestful):
         https://v.douyin.com/9Ucbd_kd-JI/
 
         """
+        # print(json.dumps(router_data, ensure_ascii=False, indent=2))
 
         loader_data: dict = router_data.get("loaderData")
         if loader_data is None:
@@ -215,6 +217,7 @@ class ShareMediaDownload(ShareMediaDownloadRestful):
 
         desc = item["desc"]
         tags = [e["hashtag_name"] for e in item["text_extra"]]
+        tags = [tag for tag in tags if len(str(tag).strip()) > 0]
         tags = list(sorted(tags, key=len, reverse=True))
         for tag in tags:
             desc = desc.lower().replace(f"#{str(tag).lower()}", "").strip()
@@ -255,7 +258,7 @@ def main() -> None:
 
     share_text = """
 
-https://v.douyin.com/CTTjXqEQ42o/
+https://v.douyin.com/5FH50u52BL4/
 
 """
     result = client.get_post_meta_by_share_text(share_text)

@@ -3,7 +3,7 @@
     "enable": true,
     "type": "banniu_task_download",
     "project_id": "39369",
-    "check_interval": 60,
+    "check_interval": 3600,
     "output_dir": "temp/banniu_39369/step_1_banniu_task_download/tasks",
     "last_fetch_tasks": "temp/banniu_39369/step_1_banniu_task_download/last_fetch_tasks.json",
     "last_fetch_time_txt": "temp/banniu_39369/step_1_banniu_task_download/last_fetch_time.txt"
@@ -198,7 +198,14 @@
     "post_review_checker_kwargs": {
       "positive_emotion_labels": ["积极"],
       "min_total_text_length": 30,
-      "required_tags": ["迈从"],
+      "required_tags_dict": {
+        "Ace68Turbo": ["迈从", "迈从Ace68Turbo"],
+        "Ace68GT": ["迈从", "迈从Ace68GT"],
+        "Ace68Air 2": ["迈从", "迈从Ace68Air2"],
+        "A7V2": ["迈从", "迈从A7V2"],
+        "Ace68V2": ["迈从", "迈从ACE68v2"],
+        "K20GT": ["迈从", "迈从K20GT"]
+      },
       "min_image_count": 3,
       "max_image_cross_rate": 0.4,
       "min_video_count": 1,

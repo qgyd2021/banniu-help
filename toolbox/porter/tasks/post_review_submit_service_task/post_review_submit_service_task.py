@@ -674,8 +674,10 @@ class PostReviewSubmitServiceTask(BaseTask, TaskJsonUtils):
             approved=payload.approved,
             reason=payload.reason,
         )
+        task_formatted = BanniuTaskFormatted.from_dict(js.get("task_formatted"))
+        product_model = (task_formatted.product_model or "").strip()
 
-        result = self.post_review_checker.predict(post_review)
+        result = self.post_review_checker.predict(post_review, product_model=product_model)
         return {
             "ok": True,
             "approval": bool(result.get("approval", False)),
