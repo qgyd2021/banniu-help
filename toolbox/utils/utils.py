@@ -44,7 +44,8 @@ def when_error(return_value: Any = None) -> Callable:
             async def async_wrapper(*args, **kwargs):
                 try:
                     return await func(*args, **kwargs)
-                except Exception:
+                except Exception as error:
+                    # print(f"failed; error type: {type(error)}, error text: {str(error)}")
                     return return_value
             return async_wrapper
         else:
@@ -52,7 +53,8 @@ def when_error(return_value: Any = None) -> Callable:
             def sync_wrapper(*args, **kwargs):
                 try:
                     return func(*args, **kwargs)
-                except Exception:
+                except Exception as error:
+                    # print(f"failed; error type: {type(error)}, error text: {str(error)}")
                     return return_value
             return sync_wrapper
     return decorator

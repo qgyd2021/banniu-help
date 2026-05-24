@@ -255,7 +255,7 @@ def main() -> None:
 
     share_text = """
 
-https://v.douyin.com/KzyuJUMMya8/
+https://v.douyin.com/CTTjXqEQ42o/
 
 """
     result = client.get_post_meta_by_share_text(share_text)

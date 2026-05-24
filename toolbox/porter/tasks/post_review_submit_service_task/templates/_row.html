@@ -97,6 +97,14 @@
           <span class="label">作者：</span>
           <span class="value">{{ pd.author_nickname or '-' }}{% if pd.author_uid %}（UID: {{ pd.author_uid[:20] }}{% if pd.author_uid|length > 20 %}…{% endif %}）{% endif %}</span>
         </div>
+        <div class="info-line post-tags-line">
+          <span class="label">标签：</span>
+          <span class="value">
+            {% if pd.tags %}
+              {% for tag in pd.tags %}<span class="tag-chip">{{ tag }}</span>{% endfor %}
+            {% else %}-{% endif %}
+          </span>
+        </div>
         <div class="interact-stats" style="margin-top: 8px;">
           <div class="interact-stat">👍 <span class="val">{{ pd.digg_count }}</span></div>
           <div class="interact-stat">💬 <span class="val">{{ pd.comment_count }}</span></div>

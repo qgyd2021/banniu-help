@@ -388,6 +388,7 @@ class PostReviewSubmitServiceTask(BaseTask, TaskJsonUtils):
                 "video_urls": self._norm_video_urls(post_meta.video_urls),
                 "image_count": len(post_meta.image_urls or []),
                 "video_count": len(post_meta.video_urls or []),
+                "tags": post_meta.tags or [],
             },
             "review_data": {
                 "review_text": post_review.review_text.model_dump(),
