@@ -333,6 +333,9 @@
     .review-reason.invalid { border-color: #ff4d4f; background: #fff1f0; box-shadow: 0 0 0 2px rgba(255, 77, 79, 0.12); }
     .reason-required-mark { color: #ff4d4f; font-weight: 600; font-size: 11px; margin-left: 6px; display: none; }
     .row[data-final-approved="false"] .reason-required-mark { display: inline; }
+    .final-required-mark { color: #ff4d4f; font-weight: 600; font-size: 11px; margin-left: 6px; display: none; }
+    .row:not([data-final-approved="true"]):not([data-final-approved="false"]) .final-required-mark { display: inline; }
+    .final-decision-row.invalid .final-btn { border-color: #ff4d4f; background: #fff1f0; box-shadow: 0 0 0 2px rgba(255, 77, 79, 0.12); }
     .review-panel {
       margin-top: 10px; border: 1px solid #eee; border-radius: 8px; background: #fafafa;
       font-size: 12px; line-height: 1.55; color: #303133;
@@ -1370,8 +1373,17 @@
     if (!sourceFile || btn.disabled) return;
     const rowEl = btn.closest('.row');
     const finalVal = rowEl?.dataset.finalApproved || '';
+    const finalRow = rowEl?.querySelector('.final-decision-row');
     const reasonEl = rowEl?.querySelector('.review-reason');
     const reason = (reasonEl?.value || '').trim();
+    // 必须完成「人工终审」才允许提交
+    if (finalVal !== 'true' && finalVal !== 'false') {
+      finalRow?.classList.add('invalid');
+      finalRow?.scrollIntoView({ block: 'nearest' });
+      window.alert('请先完成「人工终审」（选择审核通过或审核不通过）。');
+      return;
+    }
+    finalRow?.classList.remove('invalid');
     // 审核不通过必须填写备注（回复用户）
     if (finalVal === 'false' && !reason) {
       reasonEl?.classList.add('invalid');
@@ -1457,6 +1469,10 @@
       // 切换为「不通过」以外的状态时移除必填红边
       if (rowEl.dataset.finalApproved !== 'false') {
         rowEl.querySelector('.review-reason')?.classList.remove('invalid');
+      }
+      // 已做出终审决策时移除终审必填红边
+      if (rowEl.dataset.finalApproved === 'true' || rowEl.dataset.finalApproved === 'false') {
+        rowEl.querySelector('.final-decision-row')?.classList.remove('invalid');
       }
       syncFinalButtons(rowEl);
       syncFinalSuggestMatched(rowEl);

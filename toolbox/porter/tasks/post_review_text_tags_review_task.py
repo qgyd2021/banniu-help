@@ -11,6 +11,7 @@ logger = logging.getLogger("toolbox")
 
 from toolbox.porter.tasks.base_task import BaseTask, TaskJsonUtils
 from toolbox.porter.entity.post_meta import PostMeta
+from toolbox.porter.entity.banniu_task import BanniuTaskFormatted
 from toolbox.porter.entity.post_review import PostReview
 
 
@@ -24,7 +25,7 @@ class PostReviewTextTagsReviewTask(BaseTask, TaskJsonUtils):
         self,
         check_interval: int,
         platform_to_dirs: List[Tuple[str, str, str]],
-        tags_config: Optional[Dict[str, List[str]]] = None,
+        tags_config: Dict[str, Dict[str, List[str]]] = None,
         **kwargs,
     ):
         super().__init__(flag=f"[{self.__class__.__name__}]", check_interval=check_interval)
@@ -53,16 +54,18 @@ class PostReviewTextTagsReviewTask(BaseTask, TaskJsonUtils):
             files = self.pick_task_files(source_dir, recursive=False)
             for src in files:
                 payload = await self.load_json_file(src)
+                task_formatted = BanniuTaskFormatted.from_dict(payload["task_formatted"])
                 post_meta = PostMeta.from_dict(payload["post_meta"])
 
-                content = f"{post_meta.title}\n\n{post_meta.desc}\n\n{'; '.join(post_meta.tags)}"
-                content = content.lower()
+                product_tags_config: Dict[str, List[str]] = self.tags_config.get(task_formatted.product_model)
+
+                user_tags = [str(tag).lower().strip().strip("#") for tag in post_meta.tags]
 
                 match = set()
-                for standard, similar_list in self.tags_config.items():
+                for standard, similar_list in product_tags_config.items():
                     for similar in similar_list:
                         similar = str(similar).lower()
-                        if similar in content:
+                        if similar in user_tags:
                             match.add(standard)
                             break
                 miss = set(self.tags_config.keys()) - match
@@ -93,8 +96,30 @@ def main():
             "douyin": {"meta_list_key": "douyin_post_meta_list", "title_keys": ["title"], "body_keys": ["desc"]},
         },
         tags_config={
-            "迈从": ["迈从", "MCHose", "MC Hose"],
-            "迈从ACE68v2": ["迈从ACE68 v2", "迈从ACE68v2", "ACE68v2"],
+            "Ace68Turbo": {
+                "迈从": ["迈从", "MCHose", "MC Hose"],
+                "迈从Ace68Turbo": ["迈从Ace68Turbo", "迈从 Ace68Turbo", "Ace68Turbo"],
+            },
+            "Ace68GT": {
+                "迈从": ["迈从", "MCHose", "MC Hose"],
+                "迈从Ace68GT": ["迈从Ace68GT", "迈从 Ace68GT", "Ace68GT"],
+            },
+            "Ace68Air 2": {
+                "迈从": ["迈从", "MCHose", "MC Hose"],
+                "迈从Ace68Air2": ["迈从ace68air2", "迈从ace68air 2", "ace68air2", "ace68air 2"],
+            },
+            "A7V2": {
+                "迈从": ["迈从", "MCHose", "MC Hose"],
+                "迈从A7V2": ["迈从A7V2", "迈从 A7V2", "A7V2", "迈从A7鼠标"]
+            },
+            "Ace68V2": {
+                "迈从": ["迈从", "MCHose", "MC Hose"],
+                "迈从ACE68v2": ["迈从ACE68 v2", "迈从ACE68v2", "ACE68v2"],
+            },
+            "K20GT": {
+                "迈从": ["迈从", "MCHose", "MC Hose"],
+                "迈从K20GT": ["迈从K20GT", "迈从 K20GT", "K20GT"],
+            },
         },
     )
     asyncio.run(task.do_task())

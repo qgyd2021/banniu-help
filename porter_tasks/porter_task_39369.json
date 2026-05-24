@@ -3,7 +3,7 @@
     "enable": true,
     "type": "banniu_task_download",
     "project_id": "39369",
-    "check_interval": 3600,
+    "check_interval": 60,
     "output_dir": "temp/banniu_39369/step_1_banniu_task_download/tasks",
     "last_fetch_tasks": "temp/banniu_39369/step_1_banniu_task_download/last_fetch_tasks.json",
     "last_fetch_time_txt": "temp/banniu_39369/step_1_banniu_task_download/last_fetch_time.txt"
@@ -142,8 +142,30 @@
       ["weibo", "temp/banniu_39369/step_5_2_post_review_text_length_review/weibo", "temp/banniu_39369/step_5_3_post_review_text_tags_review/weibo"]
     ],
     "tags_config": {
-      "迈从": ["#迈从"],
-      "迈从ACE68v2": ["#迈从ACE68v2", "#迈从 ACE68v2", "#迈从ACE68 v2", "#迈从 ACE68 v2"]
+      "Ace68Turbo": {
+        "迈从": ["迈从", "MCHose", "MC Hose"],
+        "迈从Ace68Turbo": ["迈从Ace68Turbo", "迈从 Ace68Turbo", "Ace68Turbo"]
+      },
+      "Ace68GT": {
+        "迈从": ["迈从", "MCHose", "MC Hose"],
+        "迈从Ace68GT": ["迈从Ace68GT", "迈从 Ace68GT", "Ace68GT"]
+      },
+      "Ace68Air 2": {
+        "迈从": ["迈从", "MCHose", "MC Hose"],
+        "迈从Ace68Air2": ["迈从ace68air2", "迈从ace68air 2", "ace68air2", "ace68air 2"]
+      },
+      "A7V2": {
+        "迈从": ["迈从", "MCHose", "MC Hose"],
+        "迈从A7V2": ["迈从A7V2", "迈从 A7V2", "A7V2", "迈从A7鼠标"]
+      },
+      "Ace68V2": {
+        "迈从": ["迈从", "MCHose", "MC Hose"],
+        "迈从ACE68v2": ["迈从ACE68 v2", "迈从ACE68v2", "ACE68v2"]
+      },
+      "K20GT": {
+        "迈从": ["迈从", "MCHose", "MC Hose"],
+        "迈从K20GT": ["迈从K20GT", "迈从 K20GT", "K20GT"]
+      }
     }
   },
   {
@@ -152,6 +174,8 @@
     "check_interval": 60,
     "source_dirs": [
       "temp/banniu_39369/step_5_3_post_review_text_tags_review",
+      "temp/banniu_39369/step_2_post_review_router/blank",
+      "temp/banniu_39369/step_2_post_review_router/unknown",
       "temp/banniu_39369/step_5_2_post_review_text_length_review",
       "temp/banniu_39369/step_5_1_post_review_text_emotion_review",
       "temp/banniu_39369/step_4_post_review_duplicate_review",
