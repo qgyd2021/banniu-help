@@ -68,7 +68,7 @@ class PostReviewTextTagsReviewTask(BaseTask, TaskJsonUtils):
                         if similar in user_tags:
                             match.add(standard)
                             break
-                miss = set(self.tags_config.keys()) - match
+                miss = set(product_tags_config.keys()) - match
 
                 post_review = PostReview.from_dict(payload.get("post_review", dict()))
                 post_review.review_text.tags_match = list(match)
