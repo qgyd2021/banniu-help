@@ -13,6 +13,7 @@ logger = logging.getLogger("toolbox")
 
 from toolbox.porter.tasks.base_task import BaseTask, TaskJsonUtils, global_file_lock_dict
 from toolbox.porter.entity.post_meta import PostMeta
+from toolbox.porter.entity.banniu_task import BanniuTaskFormatted
 from toolbox.porter.entity.post_review import PostReview
 
 
@@ -36,10 +37,10 @@ class PostReviewDuplicateReviewTask(BaseTask, TaskJsonUtils):
         self.post_duplicate_file = self.resolve_project_path(post_duplicate_file)
         self.author_id_to_task_ids: Dict[str, Set[str]] = None
 
-    async def append_new_author_ids(self, platform: str, author_id: str, task_id: str):
+    async def append_new_author_ids(self, platform: str, author_id: str, product_model: str, task_id: str):
         if author_id is None or str(author_id) == 0:
             return
-        row = {"platform": platform, "author_id": author_id, "task_id": task_id}
+        row = {"platform": platform, "author_id": author_id, "product_model": product_model, "task_id": task_id}
         row = json.dumps(row, ensure_ascii=False)
 
         path = self.post_duplicate_file
@@ -76,8 +77,8 @@ class PostReviewDuplicateReviewTask(BaseTask, TaskJsonUtils):
 
         return result
 
-    def check_duplicate(self, platform: str, author_id: str, task_id: str) -> Set[str]:
-        key = f"{platform}_{author_id}"
+    def check_duplicate(self, platform: str, author_id: str, product_model: str, task_id: str) -> Set[str]:
+        key = f"{platform}_{author_id}_{product_model}"
         value: set = self.author_id_to_task_ids[key]
         value = copy.deepcopy(value)
         value.discard(task_id)
@@ -103,14 +104,16 @@ class PostReviewDuplicateReviewTask(BaseTask, TaskJsonUtils):
 
             files = self.pick_task_files(source_dir, recursive=False)
             for src in files:
-                payload = await self.load_json_file(src)
+                payload: dict = await self.load_json_file(src)
                 task_id = payload["task_id"]
                 post_meta = PostMeta.from_dict(payload["post_meta"])
                 platform = post_meta.platform
                 author_id = post_meta.user_id
+                task_formatted = BanniuTaskFormatted.from_dict(payload["task_formatted"])
+                product_model = task_formatted.product_model
 
-                await self.append_new_author_ids(platform, author_id, task_id)
-                task_ids: set = self.check_duplicate(platform, author_id, task_id)
+                await self.append_new_author_ids(platform, author_id, product_model, task_id)
+                task_ids: set = self.check_duplicate(platform, author_id, product_model, task_id)
                 post_review = PostReview.from_dict(payload.get("post_review", dict()))
                 post_review.review_duplicate.duplicate_task_ids = list(task_ids)
 

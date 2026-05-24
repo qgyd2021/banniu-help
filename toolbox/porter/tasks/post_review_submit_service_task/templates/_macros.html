@@ -1,0 +1,7 @@
+{% macro image_stream_url(url, platform, share_url='', image_index=0) -%}
+/api/media-stream?url={{ url|urlencode }}&platform={{ platform }}{% if share_url %}&share_url={{ share_url|urlencode }}{% endif %}&image_index={{ image_index }}&media_type=image
+{%- endmacro %}
+
+{% macro video_stream_url(url, platform, share_url='', video_index=0) -%}
+/api/media-stream?url={{ url|urlencode }}&platform={{ platform }}{% if share_url %}&share_url={{ share_url|urlencode }}{% endif %}&video_index={{ video_index }}&media_type=video
+{%- endmacro %}

@@ -1,0 +1,238 @@
+{% from '_macros.html' import image_stream_url, video_stream_url %}
+{% set bd = row.banniu_data or {} %}
+{% set pd = row.post_data or {} %}
+{% set rd = row.review_data or {} %}
+{% set rf = rd.review_final or {} %}
+{% set rt = rd.review_text or {} %}
+{% set platform = pd.platform or '' %}
+{% set task_id = bd.task_id or '' %}
+{% set share_url = pd.share_url or '' %}
+{% set bd_image_urls = bd.get('image_urls') or [] %}
+{% set search_blob = [
+  task_id, platform, pd.title, pd.desc,
+  pd.author_nickname, pd.author_uid, share_url,
+  bd.get('产品型号', ''), bd.get('订单号', ''), bd.get('任务状态', ''), bd.get('审核状态', ''),
+  rt.emotion_label, rt.emotion_desc,
+  (rt.tags_match or [])|join(' '), (rt.tags_miss or [])|join(' ')
+]|join(' ') %}
+{% set BANNIU_SPECIAL_KEYS = ['task_id', 'image_urls'] %}
+<section class="row"
+  data-source-file="{{ row.source_file }}"
+  data-platform="{{ platform }}"
+  data-task-id="{{ task_id }}"
+  data-search-text="{{ search_blob | lower }}"
+  data-product-model="{{ bd.get('产品型号', '') }}"
+  data-created-at="{{ bd.get('创建时间', '') }}"
+  data-review-status="{{ bd.get('审核状态', '') }}"
+  data-task-status="{{ bd.get('任务状态', '') }}"
+  data-filter-final-approved="{{ row.final_approved_key }}"
+  data-has-post="{{ '1' if pd else '0' }}"
+  data-has-review="{{ '1' if rd else '0' }}"
+  data-final-approved="{% if rf.approved is sameas true %}true{% elif rf.approved is sameas false %}false{% else %}{% endif %}">
+  {# 班牛信息：除 BANNIU_SPECIAL_KEYS 之外的字段一律按 banniu_data 原样动态展示，后端加字段无需改前端。 #}
+  <aside class="post-banniu">
+    <div class="panel-head">班牛信息</div>
+    <div class="panel-body">
+      <div class="banniu-task-id">task_id：{{ task_id or '-' }}</div>
+      <div class="banniu-list">
+        {% for key, value in bd.items() %}
+        {% if key not in BANNIU_SPECIAL_KEYS %}
+        <div class="banniu-kv">
+          <span class="k">{{ key }}</span>
+          <span class="v">
+            {%- if value is mapping -%}
+              {%- if value -%}{{ value | tojson(ensure_ascii=False) }}{%- else -%}-{%- endif -%}
+            {%- elif value is iterable and value is not string -%}
+              {%- if value -%}{{ value | join('；') }}{%- else -%}-{%- endif -%}
+            {%- elif value in (None, '') -%}
+              -
+            {%- else -%}
+              {{ value }}
+            {%- endif -%}
+          </span>
+        </div>
+        {% endif %}
+        {% endfor %}
+      </div>
+      <div class="banniu-media-label">社媒平台主页截图（{{ bd_image_urls|length }}）</div>
+      {% if bd_image_urls %}
+      <div class="banniu-imgs-wrap">
+        <div class="banniu-imgs">
+          {% for img_url in bd_image_urls %}
+          <button class="banniu-thumb-btn"
+            type="button"
+            data-media-type="image"
+            data-url="{{ img_url }}"
+            data-original-url="{{ img_url }}"
+            data-viewer-src="{{ img_url }}"
+            data-platform="{{ platform }}"
+            data-share-url="{{ share_url }}"
+            data-index="{{ loop.index0 }}"
+            data-title="班牛截图 {{ loop.index }}">
+            <img src="{{ img_url }}" loading="lazy" alt="banniu image" referrerpolicy="no-referrer" />
+          </button>
+          {% endfor %}
+        </div>
+      </div>
+      {% else %}
+      <div class="banniu-media-empty">无截图</div>
+      {% endif %}
+    </div>
+  </aside>
+
+  <div class="left-panel">
+    <div class="panel-head">贴子信息</div>
+    <div class="post-main">
+      <div class="panel-body post-main-left">
+        <div class="post-head-row">
+          <span class="platform-badge platform-{{ platform }}">{{ {'douyin':'抖音','xiaohongshu':'小红书','bilibili':'B站','kuaishou':'快手','weibo':'微博','dewu':'得物','xiaoheihe':'小黑盒'}.get(platform, platform) }}</span>
+          <span class="media-count-badge">图 {{ pd.image_count or 0 }} · 视频 {{ pd.video_count or 0 }}</span>
+          <span class="final-chip {% if row.final_approved_key == 'true' %}pass{% elif row.final_approved_key == 'false' %}reject{% endif %}">
+            终审：{% if row.final_approved_key == 'true' %}已通过{% elif row.final_approved_key == 'false' %}未通过{% else %}未决策{% endif %}
+          </span>
+        </div>
+        <div class="info-line"><span class="label">标题：</span><span class="value">{{ pd.title or '-' }}</span></div>
+        <div class="info-line"><span class="label">正文：</span><span class="value">{{ pd.desc or '-' }}</span></div>
+        <div class="info-line">
+          <span class="label">作者：</span>
+          <span class="value">{{ pd.author_nickname or '-' }}{% if pd.author_uid %}（UID: {{ pd.author_uid[:20] }}{% if pd.author_uid|length > 20 %}…{% endif %}）{% endif %}</span>
+        </div>
+        <div class="interact-stats" style="margin-top: 8px;">
+          <div class="interact-stat">👍 <span class="val">{{ pd.digg_count }}</span></div>
+          <div class="interact-stat">💬 <span class="val">{{ pd.comment_count }}</span></div>
+          <div class="interact-stat">⭐ <span class="val">{{ pd.collect_count }}</span></div>
+          <div class="interact-stat">↗️ <span class="val">{{ pd.share_count }}</span></div>
+        </div>
+        {% if share_url %}
+        <div class="share-url">分享链接：<a href="{{ share_url }}" target="_blank" rel="noopener noreferrer">{{ share_url[:72] }}{% if share_url|length > 72 %}…{% endif %}</a></div>
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="post-media-row images-row">
+      {% if pd.image_urls %}
+      <div class="imgs-wrap">
+        <div class="imgs">
+          {% for img_url in pd.image_urls %}
+          <div class="thumb-wrap">
+            <button class="mark-btn" type="button" title="标记为不符合" data-mark-key="{{ platform }}::{{ task_id }}::{{ img_url }}">×</button>
+            <button class="thumb-btn"
+              data-media-type="image"
+              data-url="{{ img_url }}"
+              data-original-url="{{ img_url }}"
+              data-viewer-src="{{ image_stream_url(img_url, platform, share_url, loop.index0) }}"
+              data-platform="{{ platform }}"
+              data-share-url="{{ share_url }}"
+              data-index="{{ loop.index0 }}"
+              data-title="{{ pd.title or '' }}"
+              data-mark-key="{{ platform }}::{{ task_id }}::{{ img_url }}">
+              <img data-src="{{ image_stream_url(img_url, platform, share_url, loop.index0) }}" loading="lazy" alt="image" />
+            </button>
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+      {% else %}
+      <div style="color: #b0b0b0; font-size: 12px; padding: 14px; text-align: center;">无图片</div>
+      {% endif %}
+    </div>
+
+    <div class="post-media-row videos-row">
+      {% if pd.video_urls %}
+      <div class="imgs-wrap">
+        <div class="imgs">
+          {% for vid in pd.video_urls %}
+          {% set vid_url = vid.video_url %}
+          <div class="thumb-wrap">
+            <button class="mark-btn" type="button" title="标记为不符合" data-mark-key="{{ platform }}::{{ task_id }}::{{ vid_url }}">×</button>
+            <button class="thumb-btn"
+              data-media-type="video"
+              data-url="{{ vid_url }}"
+              data-original-url="{{ vid_url }}"
+              data-viewer-src="{{ video_stream_url(vid_url, platform, share_url, loop.index0) }}"
+              data-platform="{{ platform }}"
+              data-share-url="{{ share_url }}"
+              data-index="{{ loop.index0 }}"
+              data-title="{{ pd.title or '' }}"
+              data-mark-key="{{ platform }}::{{ task_id }}::{{ vid_url }}">
+              {% if vid.cover_url %}
+              <img data-src="{{ image_stream_url(vid.cover_url, platform, share_url, loop.index0) }}" loading="lazy" alt="video cover" />
+              {% else %}
+              <div class="video-thumb" aria-label="video placeholder"><span>点击播放视频</span></div>
+              {% endif %}
+            </button>
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+      {% else %}
+      <div style="color: #b0b0b0; font-size: 12px; padding: 14px; text-align: center;">无视频</div>
+      {% endif %}
+    </div>
+  </div>
+
+  <aside class="post-side">
+    <div class="panel-head">审核</div>
+    <div class="panel-body-scroll">
+      <div class="side-label" style="margin-top: 0;">人工终审</div>
+      <div class="final-decision-row">
+        <button type="button" class="final-btn pass" data-approved="true">审核通过</button>
+        <button type="button" class="final-btn reject" data-approved="false">审核不通过</button>
+      </div>
+      <div class="final-suggest-row" data-final-suggest>
+        <div class="final-suggest" data-final-suggest-slot="true"></div>
+        <div class="final-suggest" data-final-suggest-slot="false"></div>
+      </div>
+
+      <div class="side-label">
+        备注（回复用户）<span class="reason-required-mark">*必填</span>
+      </div>
+      <textarea class="review-reason" placeholder="填写审核意见或驳回原因…">{{ rf.reply_to_user or '' }}</textarea>
+
+      <button class="save-media-btn" type="button" data-source-file="{{ row.source_file }}">保存图片/视频标注</button>
+      <div style="font-size: 11px; color: #8c8c8c; margin-top: 6px; line-height: 1.45;">未标记的媒体默认为「符合」</div>
+
+      <div class="side-label">自动审核预测</div>
+      <div class="auto-check" data-auto-check>
+        <div class="auto-check-head">
+          <span class="auto-check-label">当前预测</span>
+          <span class="auto-check-result pending" data-auto-check-result>等待检查…</span>
+        </div>
+        <ul class="auto-check-msgs" data-auto-check-msgs></ul>
+        <div class="auto-check-empty" data-auto-check-empty style="display: none;">无问题，预计将通过审核</div>
+      </div>
+
+      <details class="review-panel">
+        <summary>审核信息（自动）</summary>
+        <div class="review-panel-body">
+          {% set rd_dup = rd.review_duplicate or {} %}
+          {% set ri = rd.review_image or {} %}
+          {% set rv = rd.review_video or {} %}
+          <div class="review-block">
+            <div class="review-block-title">重复发帖</div>
+            {% if rd_dup.duplicate_task_ids %}
+            <div class="review-kv"><span class="k">重复 task_id：</span>{{ rd_dup.duplicate_task_ids | join(', ') }}</div>
+            {% else %}
+            <div class="review-kv">无重复</div>
+            {% endif %}
+          </div>
+          <div class="review-block">
+            <div class="review-block-title">文本</div>
+            <div class="review-kv"><span class="k">情绪：</span>{{ rt.emotion_label or '-' }}（{{ rt.emotion_desc or '-' }}）</div>
+            <div class="review-kv"><span class="k">标题/正文长度：</span>{{ rt.title_length }} / {{ rt.desc_length }}</div>
+            <div class="review-kv"><span class="k">标签匹配：</span>{{ (rt.tags_match or []) | join(', ') or '-' }}</div>
+            <div class="review-kv"><span class="k">标签缺失：</span>{{ (rt.tags_miss or []) | join(', ') or '-' }}</div>
+          </div>
+          <div class="review-block">
+            <div class="review-block-title">图片</div>
+            <div class="review-kv"><span class="k">数量/勾/叉：</span>{{ ri.total_count }} / {{ ri.check_count }} / {{ ri.cross_count }}</div>
+          </div>
+          <div class="review-block">
+            <div class="review-block-title">视频</div>
+            <div class="review-kv"><span class="k">数量/勾/叉：</span>{{ rv.total_count }} / {{ rv.check_count }} / {{ rv.cross_count }}</div>
+          </div>
+        </div>
+      </details>
+    </div>
+  </aside>
+</section>

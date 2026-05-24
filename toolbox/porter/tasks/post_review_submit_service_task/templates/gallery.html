@@ -78,29 +78,112 @@
     .filter-bar .filter-btn.primary { border-color: #1677ff; background: #1677ff; color: #fff; }
     .filter-bar .filter-btn.primary:hover { background: #0958d9; }
 
-    .rows { display: flex; flex-direction: column; gap: 12px; }
+    .rows { display: flex; flex-direction: column; gap: 14px; }
     .row {
       background: #fff;
       border-radius: 12px;
       box-shadow: 0 1px 4px rgba(0,0,0,.08);
       overflow: hidden;
       display: grid;
-      grid-template-columns: minmax(0, 1fr) 240px;
+      grid-template-columns: 496px minmax(0, 1fr) 268px;
     }
     .row.removing { opacity: 0; transform: translateY(-8px) scale(.985); max-height: 0; margin: 0; padding: 0; border: 0; transition: opacity .2s ease, transform .22s ease, max-height .28s ease, margin .28s ease, padding .28s ease; }
 
-    .left-panel { min-width: 0; display: flex; flex-direction: column; overflow: hidden; }
-    .post-main { padding: 14px 16px; background: #fafcff; border-bottom: 1px solid #f0f0f0; min-width: 0; }
+    .panel-head {
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: .3px;
+      padding: 8px 12px;
+      border-bottom: 1px solid rgba(0,0,0,.06);
+      flex-shrink: 0;
+    }
+    .panel-body { padding: 12px; min-width: 0; flex: 1; overflow: hidden; }
+
+    .post-banniu {
+      display: flex;
+      flex-direction: column;
+      font-size: 12px;
+      line-height: 1.6;
+      background: #fffbf5;
+      border-right: 1px solid #f0e6d8;
+      align-self: stretch;
+      min-width: 0;
+    }
+    .post-banniu .panel-head { background: #fff7e6; color: #ad6800; }
+    .post-banniu .banniu-task-id {
+      font-size: 11px;
+      color: #8c6d1f;
+      word-break: break-all;
+      margin-bottom: 8px;
+      padding-bottom: 8px;
+      border-bottom: 1px dashed #f0e0c8;
+    }
+    .post-banniu .banniu-list { display: flex; flex-direction: column; gap: 6px; }
+    .post-banniu .banniu-kv { margin: 0; display: flex; align-items: baseline; gap: 8px; }
+    .post-banniu .banniu-kv .k { color: #8c6d1f; flex: 0 0 auto; white-space: nowrap; }
+    .post-banniu .banniu-kv .v { color: #1f2329; font-weight: 500; flex: 1 1 auto; min-width: 0; word-break: break-word; }
+    .post-banniu .banniu-media-label {
+      font-size: 11px;
+      color: #8c6d1f;
+      margin: 10px 0 6px;
+      font-weight: 600;
+    }
+    .post-banniu .banniu-imgs-wrap { overflow-x: auto; margin-top: 4px; }
+    .post-banniu .banniu-imgs {
+      display: flex;
+      gap: 8px;
+      min-height: 248px;
+    }
+    .post-banniu .banniu-thumb-btn {
+      border: 0;
+      padding: 0;
+      background: transparent;
+      cursor: zoom-in;
+      display: block;
+      flex: 0 0 auto;
+    }
+    .post-banniu .banniu-thumb-btn img {
+      width: 330px;
+      height: 248px;
+      object-fit: cover;
+      border-radius: 8px;
+      background: #f5f0e6;
+      pointer-events: none;
+    }
+    .post-banniu .banniu-media-empty {
+      color: #b0b0b0;
+      font-size: 11px;
+      padding: 4px 0;
+    }
+
+    .left-panel {
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      background: #fafcff;
+      border-right: 1px solid #e8eef5;
+    }
+    .left-panel .panel-head { background: #e6f4ff; color: #0958d9; }
+    .post-main { padding: 0; background: transparent; border-bottom: 1px solid #eef2f7; min-width: 0; }
+    .post-main .panel-body { padding-top: 10px; }
     .post-main-left { min-width: 0; }
     .post-side {
-      border-left: 1px solid #eee;
-      padding: 12px;
-      font-size: 13px;
-      line-height: 1.6;
       display: flex;
       flex-direction: column;
       align-self: stretch;
-      background: #fff;
+      background: #f6ffed;
+      border-left: 1px solid #d9f7be;
+      font-size: 13px;
+      line-height: 1.6;
+      min-width: 0;
+    }
+    .post-side .panel-head { background: #f6ffed; color: #237804; border-bottom-color: #d9f7be; }
+    .post-side .panel-body-scroll {
+      padding: 12px;
+      flex: 1;
+      overflow-y: auto;
+      max-height: 720px;
     }
     .info-line { margin-top: 8px; font-size: 13px; line-height: 1.65; color: #303133; word-break: break-word; }
     .info-line .label { color: #606266; margin-right: 6px; }
@@ -120,13 +203,24 @@
     .platform-dewu { background: #1a1a1a; color: #fff; }
     .platform-xiaoheihe { background: #5ccc8c; color: #fff; }
 
-    .task-meta-row { display: flex; align-items: center; flex-wrap: wrap; gap: 10px 14px; margin-top: 6px; }
-    .task-id { font-size: 11px; color: #8c8c8c; }
-    .task-meta-inline { font-size: 11px; color: #8c8c8c; }
-    .task-final-inline { font-size: 11px; color: #8c8c8c; }
-    .task-final-inline.pass { color: #389e0d; }
-    .task-final-inline.reject { color: #cf1322; }
-    .task-final-inline.pending { color: #8c8c8c; }
+    .post-head-row { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 12px; margin-bottom: 8px; }
+    .media-count-badge {
+      font-size: 11px;
+      color: #595959;
+      background: #fff;
+      border: 1px solid #e8e8e8;
+      border-radius: 999px;
+      padding: 2px 8px;
+    }
+    .final-chip {
+      font-size: 11px;
+      padding: 2px 8px;
+      border-radius: 999px;
+      background: #f5f5f5;
+      color: #8c8c8c;
+    }
+    .final-chip.pass { background: #f6ffed; color: #389e0d; border: 1px solid #b7eb8f; }
+    .final-chip.reject { background: #fff2f0; color: #cf1322; border: 1px solid #ffccc7; }
     .section-label { font-size: 11px; color: #8c8c8c; margin-bottom: 6px; text-transform: uppercase; letter-spacing: .5px; }
 
     .title-text { font-size: 14px; font-weight: 600; color: #1d2129; line-height: 1.5; word-break: break-word; }
@@ -220,6 +314,9 @@
       border: 1px solid #d9d9d9; border-radius: 8px; font-size: 12px; line-height: 1.5;
       resize: vertical; font-family: inherit; color: #1d2129;
     }
+    .review-reason.invalid { border-color: #ff4d4f; background: #fff1f0; box-shadow: 0 0 0 2px rgba(255, 77, 79, 0.12); }
+    .reason-required-mark { color: #ff4d4f; font-weight: 600; font-size: 11px; margin-left: 6px; display: none; }
+    .row[data-final-approved="false"] .reason-required-mark { display: inline; }
     .review-panel {
       margin-top: 10px; border: 1px solid #eee; border-radius: 8px; background: #fafafa;
       font-size: 12px; line-height: 1.55; color: #303133;
@@ -277,12 +374,16 @@
     .empty-state .icon { font-size: 42px; margin-bottom: 12px; }
     .empty-state .text { font-size: 14px; }
 
-    @media (max-width: 1100px) {
+    @media (max-width: 1200px) {
       .row { grid-template-columns: 1fr; }
+      .post-banniu,
+      .left-panel,
       .post-side {
+        border-right: none;
         border-left: none;
-        border-bottom: 1px solid #f0f0f0;
+        border-bottom: 1px solid #eee;
       }
+      .post-side .panel-body-scroll { max-height: none; }
     }
 
     /* Viewer */
@@ -307,22 +408,35 @@
     .viewer-btn:hover { background: rgba(255,255,255,.35); }
     .viewer-prev { left: 10px; }
     .viewer-next { right: 10px; }
-    .viewer-close { position: absolute; top: -44px; right: 0; width: 40px; height: 40px; border: 0; border-radius: 999px; background: rgba(255,255,255,.2); color: #fff; font-size: 22px; cursor: pointer; }
+    .viewer-close { position: absolute; top: 10px; right: 10px; width: 36px; height: 36px; border: 0; border-radius: 999px; background: rgba(0,0,0,.55); color: #fff; font-size: 22px; line-height: 1; cursor: pointer; z-index: 30; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 8px rgba(0,0,0,.35); }
+    .viewer-close:hover { background: rgba(0,0,0,.75); }
     .viewer-index { position: absolute; left: 50%; bottom: 8px; transform: translateX(-50%); color: #dce3f3; font-size: 13px; z-index: 20; }
     .viewer-good-badge { position: absolute; top: 24px; right: 24px; width: 68px; height: 68px; border-radius: 999px; border: 4px solid #52c41a; background: #52c41a; color: #fff; font-size: 40px; font-weight: 800; line-height: 1; display: none; align-items: center; justify-content: center; box-shadow: 0 2px 10px rgba(82,196,26,.45); z-index: 25; pointer-events: none; }
     .viewer-good-badge.show { display: flex; }
     .viewer-bad-badge { position: absolute; top: 24px; right: 24px; width: 68px; height: 68px; border-radius: 999px; border: 4px solid #ff4d4f; background: #ff4d4f; color: #fff; font-size: 40px; font-weight: 800; line-height: 1; display: none; align-items: center; justify-content: center; box-shadow: 0 2px 10px rgba(255,77,79,.45); z-index: 25; pointer-events: none; }
     .viewer-bad-badge.show { display: flex; }
+
+    /* 班牛截图：仅大图预览，无侧栏/翻页/标注（窗口约为初版 1.5 倍） */
+    .viewer-content.viewer-simple {
+      width: min(98vw, 1800px);
+      height: min(96vh, 1350px);
+      grid-template-columns: 1fr;
+      gap: 0;
+      padding: 12px;
+    }
+    .viewer-content.viewer-simple .viewer-meta,
+    .viewer-content.viewer-simple .viewer-btn,
+    .viewer-content.viewer-simple .viewer-index,
+    .viewer-content.viewer-simple .viewer-good-badge,
+    .viewer-content.viewer-simple .viewer-bad-badge {
+      display: none !important;
+    }
+    .viewer-content.viewer-simple .viewer-main { border-radius: 10px; }
+    .viewer-content.viewer-simple .viewer-stage { padding: 8px; }
   </style>
 </head>
 <body>
-{% macro image_stream_url(url, platform, share_url='', image_index=0) -%}
-/api/media-stream?url={{ url|urlencode }}&platform={{ platform }}{% if share_url %}&share_url={{ share_url|urlencode }}{% endif %}&image_index={{ image_index }}&media_type=image
-{%- endmacro %}
-
-{% macro video_stream_url(url, platform, share_url='', video_index=0) -%}
-/api/media-stream?url={{ url|urlencode }}&platform={{ platform }}{% if share_url %}&share_url={{ share_url|urlencode }}{% endif %}&video_index={{ video_index }}&media_type=video
-{%- endmacro %}
+{% from '_macros.html' import image_stream_url, video_stream_url %}
 
 <div class="wrap">
   <div class="header">
@@ -330,7 +444,7 @@
     <p>标注图片/视频后可保存归档；可同时选择审核通过/不通过并填写备注</p>
   </div>
 
-  {% if rows %}
+  {% if has_data %}
   <div class="filter-bar" id="filterBar">
     <div class="filter-title">筛选与搜索</div>
     <div class="filter-group keyword">
@@ -378,7 +492,7 @@
         <option value="">全部</option>
         <option value="true">已通过</option>
         <option value="false">已驳回</option>
-        <option value="none">未决策</option>
+        <option value="none" selected>未决策</option>
       </select>
     </div>
     <div class="filter-actions">
@@ -390,193 +504,17 @@
 
   <div class="search-empty-hint" id="searchEmptyHint">没有匹配的帖子，请调整搜索或筛选条件</div>
 
-  <div class="rows" id="rowsContainer">
-    {% for row in rows %}
-    {% set rf = row.review_final or {} %}
-    {% set rt = row.review_text or {} %}
-    {% set search_blob = [
-      row.task_id, row.platform, row.title, row.desc,
-      row.author_nickname, row.author_uid, row.share_url,
-      rt.emotion_label, rt.emotion_desc,
-      (rt.tags_match or [])|join(' '), (rt.tags_miss or [])|join(' ')
-    ]|join(' ') %}
-    <section class="row"
-      data-source-file="{{ row.source_file }}"
-      data-platform="{{ row.platform }}"
-      data-task-id="{{ row.task_id }}"
-      data-search-text="{{ search_blob | lower }}"
-      data-product-model="{{ row.product_model }}"
-      data-created-at="{{ row.created_at }}"
-      data-review-status="{{ row.review_status }}"
-      data-task-status="{{ row.task_status }}"
-      data-filter-final-approved="{{ row.final_approved_key }}"
-      data-final-approved="{% if rf.approved is sameas true %}true{% elif rf.approved is sameas false %}false{% else %}{% endif %}">
-      <div class="left-panel">
-        <div class="post-main">
-          <div class="post-main-left">
-            <span class="platform-badge platform-{{ row.platform }}">{{ {'douyin':'抖音','xiaohongshu':'小红书','bilibili':'B站','kuaishou':'快手','weibo':'微博','dewu':'得物','xiaoheihe':'小黑盒'}.get(row.platform, row.platform) }}</span>
-            <div class="task-meta-row">
-              <span class="task-id">task_id: {{ row.task_id }}</span>
-              <span class="task-meta-inline">产品型号：{{ row.product_model or '-' }}</span>
-              <span class="task-meta-inline">订单号：{{ row.order_no or '-' }}</span>
-              <span class="task-meta-inline">创建时间：{{ row.created_at or '-' }}</span>
-              <span class="task-meta-inline">任务状态：{{ row.task_status or '-' }}</span>
-              <span class="task-meta-inline">流程状态：{{ row.flow_status or '-' }}</span>
-              <span class="task-meta-inline">审核状态：{{ row.review_status or '-' }}</span>
-              <span class="task-final-inline {% if row.final_approved_key == 'true' %}pass{% elif row.final_approved_key == 'false' %}reject{% else %}pending{% endif %}">
-                当前终审：{% if row.final_approved_key == 'true' %}已通过{% elif row.final_approved_key == 'false' %}未通过{% else %}未决策{% endif %}
-              </span>
-            </div>
-            <div class="info-line"><span class="label">标题：</span><span class="value">{{ row.title or '-' }}</span></div>
-            <div class="info-line"><span class="label">正文：</span><span class="value">{{ row.desc or '-' }}</span></div>
-            <div class="info-line">
-              <span class="label">作者：</span>
-              <span class="value">{{ row.author_nickname or '-' }}{% if row.author_uid %}（UID: {{ row.author_uid[:16] }}...）{% endif %}</span>
-            </div>
-
-            <div class="interact-stats" style="margin-top: 8px;">
-              <div class="interact-stat">👍 <span class="val">{{ row.digg_count }}</span></div>
-              <div class="interact-stat">💬 <span class="val">{{ row.comment_count }}</span></div>
-              <div class="interact-stat">⭐ <span class="val">{{ row.collect_count }}</span></div>
-              <div class="interact-stat">↗️ <span class="val">{{ row.share_count }}</span></div>
-            </div>
-          </div>
-        </div>
-
-        <div class="post-media-row images-row">
-          {% if row.image_urls %}
-          <div class="imgs-wrap">
-            <div class="imgs">
-              {% for img_url in row.image_urls %}
-              <div class="thumb-wrap">
-                <button class="mark-btn" type="button" title="标记为不符合" data-mark-key="{{ row.platform }}::{{ row.task_id }}::{{ img_url }}">×</button>
-                <button class="thumb-btn"
-                  data-media-type="image"
-                  data-url="{{ img_url }}"
-                  data-original-url="{{ img_url }}"
-                  data-viewer-src="{{ image_stream_url(img_url, row.platform, row.share_url or '', loop.index0) }}"
-                  data-platform="{{ row.platform }}"
-                  data-share-url="{{ row.share_url or '' }}"
-                  data-index="{{ loop.index0 }}"
-                  data-title="{{ row.title or '' }}"
-                  data-mark-key="{{ row.platform }}::{{ row.task_id }}::{{ img_url }}">
-                  <img data-src="{{ image_stream_url(img_url, row.platform, row.share_url or '', loop.index0) }}" loading="lazy" alt="image" />
-                </button>
-              </div>
-              {% endfor %}
-            </div>
-          </div>
-          {% else %}
-          <div style="color: #b0b0b0; font-size: 12px; padding: 14px; text-align: center;">无图片</div>
-          {% endif %}
-        </div>
-
-        <div class="post-media-row videos-row">
-          {% if row.video_urls %}
-          <div class="imgs-wrap">
-            <div class="imgs">
-              {% for vid_url in row.video_urls %}
-              <div class="thumb-wrap">
-                <button class="mark-btn" type="button" title="标记为不符合" data-mark-key="{{ row.platform }}::{{ row.task_id }}::{{ vid_url }}">×</button>
-                <button class="thumb-btn"
-                  data-media-type="video"
-                  data-url="{{ vid_url }}"
-                  data-original-url="{{ vid_url }}"
-                  data-viewer-src="{{ video_stream_url(vid_url, row.platform, row.share_url or '', loop.index0) }}"
-                  data-platform="{{ row.platform }}"
-                  data-share-url="{{ row.share_url or '' }}"
-                  data-index="{{ loop.index0 }}"
-                  data-title="{{ row.title or '' }}"
-                  data-mark-key="{{ row.platform }}::{{ row.task_id }}::{{ vid_url }}">
-                  <div class="video-thumb" aria-label="video placeholder">
-                    <span>点击播放视频</span>
-                  </div>
-                </button>
-              </div>
-              {% endfor %}
-            </div>
-          </div>
-          {% else %}
-          <div style="color: #b0b0b0; font-size: 12px; padding: 14px; text-align: center;">无视频</div>
-          {% endif %}
-        </div>
-      </div>
-
-      <div class="post-side">
-        <div class="side-label">人工终审</div>
-        <div class="final-decision-row">
-          <button type="button" class="final-btn pass" data-approved="true">审核通过</button>
-          <button type="button" class="final-btn reject" data-approved="false">审核不通过</button>
-        </div>
-        <div class="final-suggest-row" data-final-suggest>
-          <div class="final-suggest" data-final-suggest-slot="true"></div>
-          <div class="final-suggest" data-final-suggest-slot="false"></div>
-        </div>
-
-        <div class="side-label">备注（回复用户）</div>
-        <textarea class="review-reason" placeholder="填写审核意见或驳回原因…">{{ rf.reply_to_user or '' }}</textarea>
-
-        <button class="save-media-btn" type="button" data-source-file="{{ row.source_file }}">保存图片/视频标注</button>
-        <div style="font-size: 11px; color: #8c8c8c; margin-top: 6px; line-height: 1.45;">未标记的媒体默认为「符合」；</div>
-        {% if row.share_url %}
-        <div class="link" style="margin-top: 6px;">分享链接：<a href="{{ row.share_url }}" target="_blank" rel="noopener noreferrer">{{ row.share_url[:60] }}{% if row.share_url|length > 60 %}...{% endif %}</a></div>
-        {% endif %}
-
-        <div class="side-label">自动审核预测</div>
-        <div class="auto-check" data-auto-check>
-          <div class="auto-check-head">
-            <span class="auto-check-label">当前预测</span>
-            <span class="auto-check-result pending" data-auto-check-result>等待检查…</span>
-          </div>
-          <ul class="auto-check-msgs" data-auto-check-msgs></ul>
-          <div class="auto-check-empty" data-auto-check-empty style="display: none;">无问题，预计将通过审核</div>
-        </div>
-
-        <details class="review-panel">
-          <summary>审核信息（自动）</summary>
-          <div class="review-panel-body">
-            {% set rt = row.review_text or {} %}
-            {% set rd = row.review_duplicate or {} %}
-            {% set ri = row.review_image or {} %}
-            {% set rv = row.review_video or {} %}
-            <div class="review-block">
-              <div class="review-block-title">重复发帖</div>
-              {% if rd.duplicate_task_ids %}
-              <div class="review-kv"><span class="k">重复 task_id：</span>{{ rd.duplicate_task_ids | join(', ') }}</div>
-              {% else %}
-              <div class="review-kv">无重复</div>
-              {% endif %}
-            </div>
-            <div class="review-block">
-              <div class="review-block-title">文本</div>
-              <div class="review-kv"><span class="k">情绪：</span>{{ rt.emotion_label or '-' }}（{{ rt.emotion_desc or '-' }}）</div>
-              <div class="review-kv"><span class="k">标题/正文长度：</span>{{ rt.title_length }} / {{ rt.desc_length }}</div>
-              <div class="review-kv"><span class="k">标签匹配：</span>{{ (rt.tags_match or []) | join(', ') or '-' }}</div>
-              <div class="review-kv"><span class="k">标签缺失：</span>{{ (rt.tags_miss or []) | join(', ') or '-' }}</div>
-            </div>
-            <div class="review-block">
-              <div class="review-block-title">图片</div>
-              <div class="review-kv"><span class="k">数量/勾/叉：</span>{{ ri.total_count }} / {{ ri.check_count }} / {{ ri.cross_count }}</div>
-            </div>
-            <div class="review-block">
-              <div class="review-block-title">视频</div>
-              <div class="review-kv"><span class="k">数量/勾/叉：</span>{{ rv.total_count }} / {{ rv.check_count }} / {{ rv.cross_count }}</div>
-            </div>
-          </div>
-        </details>
-      </div>
-    </section>
-
-    {% endfor %}
-    <div id="paginateLoading">加载更多…</div>
-    <div id="paginateSentinel" aria-hidden="true"></div>
-  </div>
+  <div class="rows" id="rowsContainer"></div>
+  <div id="paginateLoading">加载中…</div>
+  <div id="paginateSentinel" aria-hidden="true"></div>
   {% else %}
   <div class="empty-state">
     <div class="icon">📭</div>
     <div class="text">当前目录没有可审核的帖子数据</div>
   </div>
   {% endif %}
+
+  {# 单行渲染已迁移到 _row.html，由 /api/next-rows 动态获取 #}
 </div>
 
 <button id="backTopBtn" class="back-top" type="button">↑</button>
@@ -628,6 +566,7 @@
   const btnClose = document.getElementById('viewerClose');
   const backTopBtn = document.getElementById('backTopBtn');
   const vMarkBtn = document.getElementById('viewerMarkBtn');
+  const viewerContent = document.querySelector('.viewer-content');
 
   const MARK_STORE_KEY = 'gallery_marks_' + window.location.pathname;
   const badSet = new Set();
@@ -640,6 +579,29 @@
   let dragging = false;
   let dragStartX = 0, dragStartY = 0, dragBaseX = 0, dragBaseY = 0;
   let currentMediaType = 'image';
+  let viewerSimpleMode = false;
+
+  function setViewerSimpleMode(simple) {
+    viewerSimpleMode = !!simple;
+    if (viewerContent) viewerContent.classList.toggle('viewer-simple', viewerSimpleMode);
+    if (!viewerSimpleMode) resetViewerImgLayout();
+  }
+
+  function resetViewerImgLayout() {
+    vImg.style.width = '';
+    vImg.style.height = '';
+    vImg.style.maxWidth = '';
+    vImg.style.maxHeight = '';
+    vImg.style.objectFit = '';
+    vImg.style.transform = '';
+    scale = 1;
+    tx = 0;
+    ty = 0;
+  }
+
+  function fitBanniuImageToViewer() {
+    fitImageToViewer({ allowUpscale: true });
+  }
 
   function saveMarks() {
     try { localStorage.setItem(MARK_STORE_KEY, JSON.stringify({ bad: Array.from(badSet), good: Array.from(goodSet) })); } catch (_) {}
@@ -660,7 +622,8 @@
     vImg.style.transform = `translate(${tx}px, ${ty}px) scale(${scale})`;
   }
 
-  function fitImageToViewer() {
+  function fitImageToViewer(opts = {}) {
+    resetViewerImgLayout();
     const vw = viewerStage.clientWidth;
     const vh = viewerStage.clientHeight;
     const iw = vImg.naturalWidth || 0;
@@ -668,7 +631,8 @@
     if (!vw || !vh || !iw || !ih) return;
     vImg.style.width = `${iw}px`;
     vImg.style.height = `${ih}px`;
-    fitScale = Math.min(vw / iw, vh / ih, 1);
+    const baseFit = Math.min(vw / iw, vh / ih);
+    fitScale = opts.allowUpscale ? baseFit : Math.min(baseFit, 1);
     scale = fitScale;
     tx = (vw - iw * scale) / 2;
     ty = (vh - ih * scale) / 2;
@@ -779,6 +743,15 @@
       clearFinalSuggest(rowEl);
       return;
     }
+    if (state.status === 'skipped') {
+      result.classList.add('pending');
+      result.textContent = '已跳过';
+      const li = document.createElement('li');
+      li.textContent = state.message || '前置信息缺失，跳过自动预测';
+      msgs.appendChild(li);
+      clearFinalSuggest(rowEl);
+      return;
+    }
 
     const approval = !!state.approval;
     const reasons = state.review_msg || {};
@@ -810,6 +783,14 @@
     if (!rowEl) return;
     const sourceFile = rowEl.dataset.sourceFile || '';
     if (!sourceFile) return;
+    if (rowEl.dataset.hasPost !== '1' || rowEl.dataset.hasReview !== '1') {
+      const missing = [];
+      if (rowEl.dataset.hasPost !== '1') missing.push('贴子信息');
+      if (rowEl.dataset.hasReview !== '1') missing.push('审核信息');
+      renderAutoCheck(rowEl, { status: 'skipped', message: `缺少${missing.join('与')}，跳过自动预测` });
+      checkedRows.add(rowEl);
+      return;
+    }
 
     const prevCtrl = checkAbortControllers.get(rowEl);
     if (prevCtrl) { try { prevCtrl.abort(); } catch (_) {} }
@@ -872,9 +853,41 @@
     scheduleAutoCheck(rowEl, 50);
   }
 
+  function openBanniuViewer(src) {
+    const url = String(src || '').trim();
+    if (!url) return;
+    setViewerSimpleMode(true);
+    currentMediaType = 'image';
+    vVideo.pause();
+    vVideo.removeAttribute('src');
+    vVideo.load();
+    vVideo.style.display = 'none';
+    vImg.style.display = 'block';
+    mask.classList.add('show');
+    mask.setAttribute('aria-hidden', 'false');
+    document.body.style.overflow = 'hidden';
+    const tryFit = (retry = 6) => {
+      const vw = viewerStage.clientWidth;
+      const vh = viewerStage.clientHeight;
+      const iw = vImg.naturalWidth || 0;
+      const ih = vImg.naturalHeight || 0;
+      if (vw && vh && iw && ih) {
+        fitBanniuImageToViewer();
+      } else if (retry > 0) {
+        requestAnimationFrame(() => tryFit(retry - 1));
+      }
+    };
+    vImg.onload = () => requestAnimationFrame(() => tryFit());
+    vImg.src = url;
+    if (vImg.complete && vImg.naturalWidth > 0) {
+      requestAnimationFrame(() => tryFit());
+    }
+  }
+
   function renderViewer() {
     const item = flatList[currentIdx];
     if (!item) return;
+    setViewerSimpleMode(false);
     currentMediaType = item.mediaType || 'image';
     if (currentMediaType === 'video') {
       vImg.style.display = 'none';
@@ -925,28 +938,15 @@
     mask.setAttribute('aria-hidden', 'true');
     document.body.style.overflow = '';
     dragging = false;
+    setViewerSimpleMode(false);
   }
 
   function prev() { if (flatList.length) { currentIdx = (currentIdx - 1 + flatList.length) % flatList.length; renderViewer(); } }
   function next() { if (flatList.length) { currentIdx = (currentIdx + 1) % flatList.length; renderViewer(); } }
 
-  document.querySelectorAll('.mark-btn').forEach(btn => {
-    btn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      e.preventDefault();
-      const key = btn.dataset.markKey || '';
-      if (!key) return;
-      if (badSet.has(key)) badSet.delete(key);
-      else { badSet.add(key); goodSet.delete(key); }
-      saveMarks();
-      syncMarks();
-      scheduleAutoCheck(btn.closest('.row'));
-    });
-  });
-
   function buildFlatList() {
     flatList = [];
-    document.querySelectorAll('.row:not(.filter-hidden):not(.paginate-hidden) .thumb-btn').forEach(item => {
+    document.querySelectorAll('#rowsContainer .row .thumb-btn').forEach(item => {
       const mediaType = item.dataset.mediaType || 'image';
       const src = item.dataset.viewerSrc || '';
       const shareUrl = item.dataset.shareUrl || '';
@@ -965,14 +965,6 @@
     });
   }
 
-  document.querySelectorAll('.thumb-btn').forEach((item, i) => {
-    item.addEventListener('click', (e) => {
-      e.preventDefault();
-      const idx = flatList.findIndex(x => x.markKey === item.dataset.markKey);
-      openViewer(idx >= 0 ? idx : i);
-    });
-  });
-
   vMarkBtn.addEventListener('click', () => {
     const key = flatList[currentIdx]?.markKey || '';
     if (!key) return;
@@ -990,8 +982,12 @@
 
   document.addEventListener('keydown', (e) => {
     if (!mask.classList.contains('show')) return;
-    if (e.key === 'Escape') closeViewer();
-    else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') prev();
+    if (e.key === 'Escape') {
+      closeViewer();
+      return;
+    }
+    if (viewerSimpleMode) return;
+    if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') prev();
     else if (e.key === 'ArrowRight' || e.key === 'ArrowDown') next();
     else if (e.code === 'Space') {
       e.preventDefault();
@@ -1057,7 +1053,11 @@
     viewerMain.classList.remove('dragging');
   });
 
-  window.addEventListener('resize', () => { if (!mask.classList.contains('show')) return; fitImageToViewer(); });
+  window.addEventListener('resize', () => {
+    if (!mask.classList.contains('show')) return;
+    if (viewerSimpleMode) fitBanniuImageToViewer();
+    else fitImageToViewer();
+  });
 
   backTopBtn.addEventListener('click', () => window.scrollTo({ top: 0, behavior: 'smooth' }));
   window.addEventListener('scroll', () => { const y = window.scrollY || document.documentElement.scrollTop || 0; backTopBtn.classList.toggle('show', y > 280); }, { passive: true });
@@ -1101,8 +1101,37 @@
     }
   }
 
-  const PAGE_SIZE = 10;
-  let paginateLimit = PAGE_SIZE;
+  const PAGE_SIZE = 2;
+  // 前端持久化 ID：只在首次访问该浏览器时生成，存入 localStorage，
+  // 后续刷新 / 重新打开标签页都复用同一个 ID。
+  // 后端按 task_id 维护"首次分发给哪个 client_id"，因此：
+  // - 同一 client（同一个人）刷新后能再次看到刚才他自己已经看过的帖子；
+  // - 别的 client 看不到已被本人锁定的帖子，避免撞车。
+  const CLIENT_ID = (() => {
+    const KEY = 'banniu_review_client_id';
+    const gen = () => {
+      try {
+        if (window.crypto && typeof window.crypto.randomUUID === 'function') return window.crypto.randomUUID();
+      } catch (e) {}
+      return `c-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+    };
+    try {
+      const exist = window.localStorage?.getItem(KEY);
+      if (exist) return exist;
+      const fresh = gen();
+      window.localStorage?.setItem(KEY, fresh);
+      return fresh;
+    } catch (e) {
+      return gen();
+    }
+  })();
+  const rowsContainer = document.getElementById('rowsContainer');
+  const paginateLoadingEl = document.getElementById('paginateLoading');
+  const paginateSentinelEl = document.getElementById('paginateSentinel');
+  let reachedEnd = false;
+  let inFlight = false;
+  let lastTotalMatched = 0;
+  let lastFilterSignature = '';
 
   function revealImagesInRow(rowEl) {
     if (!rowEl) return;
@@ -1115,105 +1144,6 @@
     });
   }
 
-  function applyPagination() {
-    const rows = document.querySelectorAll('#rowsContainer .row:not(.filter-hidden)');
-    let shown = 0;
-    rows.forEach((row) => {
-      if (shown < paginateLimit) {
-        row.classList.remove('paginate-hidden');
-        revealImagesInRow(row);
-        ensureAutoCheckedOnce(row);
-        shown += 1;
-      } else {
-        row.classList.add('paginate-hidden');
-      }
-    });
-    const loadingEl = document.getElementById('paginateLoading');
-    if (loadingEl) loadingEl.classList.toggle('show', shown < rows.length);
-  }
-
-  function resetPagination() {
-    paginateLimit = PAGE_SIZE;
-  }
-
-  function applyAllFilters() {
-    const q = (searchKeyword?.value || '').trim().toLowerCase();
-    const productModel = (filterProductModel?.value || '').trim();
-    const reviewStatus = (filterReviewStatus?.value || '').trim();
-    const taskStatus = (filterTaskStatus?.value || '').trim();
-    const finalApproved = (filterFinalApproved?.value || '').trim();
-    const startTs = parseDatetimeLocalInput(filterCreatedStart?.value || '');
-    const endTs = parseDatetimeLocalInput(filterCreatedEnd?.value || '');
-
-    const rowEls = document.querySelectorAll('#rowsContainer .row');
-    let visible = 0;
-    rowEls.forEach((row) => {
-      let ok = true;
-      if (q && !(row.dataset.searchText || '').toLowerCase().includes(q)) ok = false;
-      if (productModel && (row.dataset.productModel || '') !== productModel) ok = false;
-      if (reviewStatus && (row.dataset.reviewStatus || '') !== reviewStatus) ok = false;
-      if (taskStatus && (row.dataset.taskStatus || '') !== taskStatus) ok = false;
-      if (finalApproved && (row.dataset.filterFinalApproved || 'none') !== finalApproved) ok = false;
-
-      const createdTs = parseCreatedAt(row.dataset.createdAt || '');
-      if (startTs !== null && (createdTs === null || createdTs < startTs)) ok = false;
-      if (endTs !== null && (createdTs === null || createdTs > endTs)) ok = false;
-
-      row.classList.toggle('filter-hidden', !ok);
-      if (ok) visible += 1;
-    });
-
-    const total = rowEls.length;
-    const parts = [`显示 ${visible} / ${total} 条`];
-    if (q) parts.push(`关键词「${q}」`);
-    if (productModel) parts.push(`型号=${productModel}`);
-    if (reviewStatus) parts.push(`审核=${reviewStatus}`);
-    if (taskStatus) parts.push(`任务=${taskStatus}`);
-    if (finalApproved) parts.push(`终审=${finalApproved}`);
-    if (startTs !== null || endTs !== null) parts.push('已限创建时间');
-    if (searchSummary) searchSummary.textContent = parts.join(' · ');
-    if (searchEmptyHint) searchEmptyHint.classList.toggle('show', total > 0 && visible === 0);
-    applyPagination();
-    syncViewerAfterFilter();
-  }
-
-  filterSearchBtn?.addEventListener('click', () => { resetPagination(); applyAllFilters(); });
-  searchKeyword?.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') {
-      e.preventDefault();
-      resetPagination();
-      applyAllFilters();
-    }
-  });
-
-  filterResetBtn?.addEventListener('click', () => {
-    if (searchKeyword) searchKeyword.value = '';
-    if (filterProductModel) filterProductModel.value = '';
-    if (filterCreatedStart) filterCreatedStart.value = '';
-    if (filterCreatedEnd) filterCreatedEnd.value = '';
-    if (filterReviewStatus) filterReviewStatus.value = '';
-    if (filterTaskStatus) filterTaskStatus.value = '';
-    if (filterFinalApproved) filterFinalApproved.value = '';
-    resetPagination();
-    applyAllFilters();
-  });
-
-  const paginateSentinel = document.getElementById('paginateSentinel');
-  if (paginateSentinel && 'IntersectionObserver' in window) {
-    const io = new IntersectionObserver((entries) => {
-      entries.forEach((entry) => {
-        if (!entry.isIntersecting) return;
-        const total = document.querySelectorAll('#rowsContainer .row:not(.filter-hidden)').length;
-        if (paginateLimit < total) {
-          paginateLimit += PAGE_SIZE;
-          applyPagination();
-          syncViewerAfterFilter();
-        }
-      });
-    }, { rootMargin: '300px 0px' });
-    io.observe(paginateSentinel);
-  }
-
   function syncFinalButtons(rowEl) {
     if (!rowEl) return;
     const val = rowEl.dataset.finalApproved || '';
@@ -1221,30 +1151,6 @@
       b.classList.toggle('active', (b.dataset.approved || '') === val);
     });
   }
-
-  document.querySelectorAll('.row').forEach((rowEl) => syncFinalButtons(rowEl));
-
-  document.querySelectorAll('.final-btn').forEach((btn) => {
-    btn.addEventListener('click', () => {
-      const rowEl = btn.closest('.row');
-      if (!rowEl) return;
-      const val = btn.dataset.approved || '';
-      rowEl.dataset.finalApproved = rowEl.dataset.finalApproved === val ? '' : val;
-      syncFinalButtons(rowEl);
-      syncFinalSuggestMatched(rowEl);
-      scheduleAutoCheck(rowEl);
-    });
-  });
-
-  document.querySelectorAll('.review-reason').forEach((ta) => {
-    ta.addEventListener('input', () => {
-      const rowEl = ta.closest('.row');
-      if (!rowEl) return;
-      const finalVal = rowEl.dataset.finalApproved || '';
-      // 只有在选了“审核不通过”时，备注才会进入 checker 的判定（review_final 信息），其他情况下重跑无意义。
-      if (finalVal === 'false') scheduleAutoCheck(rowEl, 700);
-    });
-  });
 
   function collectMediaMarks(rowEl) {
     const mediaMarks = {};
@@ -1261,7 +1167,168 @@
     return mediaMarks;
   }
 
-  async function postSubmitRow(sourceFile, body) {
+  function getCurrentFilters() {
+    return {
+      keyword: (searchKeyword?.value || '').trim(),
+      product_model: (filterProductModel?.value || '').trim(),
+      created_start: (filterCreatedStart?.value || '').trim(),
+      created_end: (filterCreatedEnd?.value || '').trim(),
+      review_status: (filterReviewStatus?.value || '').trim(),
+      task_status: (filterTaskStatus?.value || '').trim(),
+      final_approved: (filterFinalApproved?.value || '').trim(),
+    };
+  }
+
+  function getFilterSignature() {
+    return JSON.stringify(getCurrentFilters());
+  }
+
+  function updateSearchSummary() {
+    if (!searchSummary) return;
+    const f = getCurrentFilters();
+    const visible = rowsContainer.querySelectorAll('.row').length;
+    const parts = [`已加载 ${visible} 条，匹配总数 ${lastTotalMatched}`];
+    if (f.keyword) parts.push(`关键词「${f.keyword}」`);
+    if (f.product_model) parts.push(`型号=${f.product_model}`);
+    if (f.review_status) parts.push(`审核=${f.review_status}`);
+    if (f.task_status) parts.push(`任务=${f.task_status}`);
+    if (f.final_approved) parts.push(`终审=${f.final_approved}`);
+    if (f.created_start || f.created_end) parts.push('已限创建时间');
+    searchSummary.textContent = parts.join(' · ');
+    if (searchEmptyHint) {
+      searchEmptyHint.classList.toggle('show', lastTotalMatched > 0 && visible === 0);
+    }
+  }
+
+  function updatePaginateLoading() {
+    if (!paginateLoadingEl) return;
+    if (inFlight) {
+      paginateLoadingEl.classList.add('show');
+      paginateLoadingEl.textContent = '加载中…';
+    } else if (reachedEnd) {
+      const total = rowsContainer.querySelectorAll('.row').length;
+      if (total > 0) {
+        paginateLoadingEl.classList.add('show');
+        paginateLoadingEl.textContent = '已加载全部';
+      } else {
+        paginateLoadingEl.classList.remove('show');
+      }
+    } else {
+      paginateLoadingEl.classList.remove('show');
+    }
+  }
+
+  async function fetchNextRows({ reset = false, limit = PAGE_SIZE } = {}) {
+    if (!rowsContainer) return;
+    if (inFlight) return;
+    const signature = getFilterSignature();
+    if (reset) {
+      lastFilterSignature = signature;
+      rowsContainer.innerHTML = '';
+      reachedEnd = false;
+      lastTotalMatched = 0;
+      buildFlatList();
+      if (mask.classList.contains('show')) closeViewer();
+    } else if (signature !== lastFilterSignature) {
+      return;
+    }
+    if (reachedEnd) {
+      updatePaginateLoading();
+      updateSearchSummary();
+      return;
+    }
+    const excludeTaskIds = Array.from(rowsContainer.querySelectorAll('.row'))
+      .map((r) => r.dataset.taskId || '')
+      .filter(Boolean);
+    inFlight = true;
+    updatePaginateLoading();
+    try {
+      const body = {
+        ...getCurrentFilters(),
+        client_id: CLIENT_ID,
+        limit,
+        exclude_task_ids: excludeTaskIds,
+      };
+      const resp = await fetch('/api/next-rows', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      const data = await resp.json();
+      if (!resp.ok || !data?.ok) {
+        const detail = typeof data?.detail === 'string' ? data.detail : JSON.stringify(data?.detail || data);
+        throw new Error(detail || '加载失败');
+      }
+      if (signature !== lastFilterSignature) return;
+      lastTotalMatched = Number(data.total_matched || 0);
+      reachedEnd = !!data.reached_end;
+      const items = Array.isArray(data.rows) ? data.rows : [];
+      for (const item of items) {
+        if (!item || !item.html) continue;
+        const tpl = document.createElement('template');
+        tpl.innerHTML = item.html.trim();
+        const rowEl = tpl.content.firstElementChild;
+        if (!rowEl) continue;
+        rowsContainer.appendChild(rowEl);
+        revealImagesInRow(rowEl);
+        syncFinalButtons(rowEl);
+        ensureAutoCheckedOnce(rowEl);
+      }
+      buildFlatList();
+      syncMarks();
+    } catch (err) {
+      console.warn('fetchNextRows failed:', err);
+      if (paginateLoadingEl) {
+        paginateLoadingEl.classList.add('show');
+        paginateLoadingEl.textContent = `加载失败：${err?.message || err}`;
+      }
+    } finally {
+      inFlight = false;
+      updatePaginateLoading();
+      updateSearchSummary();
+    }
+  }
+
+  function reloadRows() {
+    fetchNextRows({ reset: true, limit: PAGE_SIZE });
+  }
+
+  filterSearchBtn?.addEventListener('click', () => reloadRows());
+  searchKeyword?.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      reloadRows();
+    }
+  });
+  [filterProductModel, filterReviewStatus, filterTaskStatus, filterFinalApproved,
+   filterCreatedStart, filterCreatedEnd].forEach((el) => {
+    el?.addEventListener('change', () => reloadRows());
+  });
+
+  filterResetBtn?.addEventListener('click', () => {
+    if (searchKeyword) searchKeyword.value = '';
+    if (filterProductModel) filterProductModel.value = '';
+    if (filterCreatedStart) filterCreatedStart.value = '';
+    if (filterCreatedEnd) filterCreatedEnd.value = '';
+    if (filterReviewStatus) filterReviewStatus.value = '';
+    if (filterTaskStatus) filterTaskStatus.value = '';
+    if (filterFinalApproved) filterFinalApproved.value = 'none';
+    reloadRows();
+  });
+
+  if (paginateSentinelEl && 'IntersectionObserver' in window) {
+    const io = new IntersectionObserver((entries) => {
+      entries.forEach((entry) => {
+        if (!entry.isIntersecting) return;
+        if (inFlight || reachedEnd) return;
+        if (rowsContainer.querySelectorAll('.row').length === 0) return;
+        fetchNextRows({ reset: false, limit: PAGE_SIZE });
+      });
+    }, { rootMargin: '300px 0px' });
+    io.observe(paginateSentinelEl);
+  }
+
+  async function postSubmitRow(body) {
     let resp = await fetch('/api/submit-row', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -1282,46 +1349,129 @@
     return data;
   }
 
-  document.querySelectorAll('.save-media-btn').forEach((btn) => {
-    btn.addEventListener('click', async () => {
-      const sourceFile = btn.dataset.sourceFile || '';
-      if (!sourceFile || btn.disabled) return;
-      const rowEl = btn.closest('.row');
-      const oldText = btn.textContent;
-      btn.disabled = true;
-      btn.textContent = '保存中...';
-      try {
-        const body = { source_file: sourceFile, media_marks: collectMediaMarks(rowEl) };
-        const finalVal = rowEl?.dataset.finalApproved || '';
-        if (finalVal === 'true') {
-          body.approved = true;
-          body.reason = (rowEl.querySelector('.review-reason')?.value || '').trim();
-        } else if (finalVal === 'false') {
-          body.approved = false;
-          body.reason = (rowEl.querySelector('.review-reason')?.value || '').trim();
-        }
-        await postSubmitRow(sourceFile, body);
-        btn.textContent = '已保存';
-        if (rowEl) {
-          rowEl.style.maxHeight = rowEl.offsetHeight + 'px';
-          requestAnimationFrame(() => rowEl.classList.add('removing'));
-          setTimeout(() => {
-            rowEl.remove();
-            applyAllFilters();
-            if (!flatList.length && !document.querySelector('#rowsContainer .row')) window.location.reload();
-          }, 320);
-        }
-      } catch (err) {
-        btn.disabled = false;
-        btn.textContent = oldText || '保存图片/视频标注';
-        window.alert(`保存失败：${err?.message || err}`);
+  async function handleSaveMedia(btn) {
+    const sourceFile = btn.dataset.sourceFile || '';
+    if (!sourceFile || btn.disabled) return;
+    const rowEl = btn.closest('.row');
+    const finalVal = rowEl?.dataset.finalApproved || '';
+    const reasonEl = rowEl?.querySelector('.review-reason');
+    const reason = (reasonEl?.value || '').trim();
+    // 审核不通过必须填写备注（回复用户）
+    if (finalVal === 'false' && !reason) {
+      reasonEl?.classList.add('invalid');
+      reasonEl?.focus();
+      window.alert('选择「审核不通过」时，必须填写备注（回复用户）。');
+      return;
+    }
+    reasonEl?.classList.remove('invalid');
+    const oldText = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = '保存中...';
+    try {
+      const body = { source_file: sourceFile, media_marks: collectMediaMarks(rowEl) };
+      if (finalVal === 'true') {
+        body.approved = true;
+        body.reason = reason;
+      } else if (finalVal === 'false') {
+        body.approved = false;
+        body.reason = reason;
       }
-    });
+      await postSubmitRow(body);
+      btn.textContent = '已保存';
+      if (rowEl) {
+        rowEl.style.maxHeight = rowEl.offsetHeight + 'px';
+        requestAnimationFrame(() => rowEl.classList.add('removing'));
+        setTimeout(() => {
+          rowEl.remove();
+          buildFlatList();
+          updateSearchSummary();
+          // 移除一行后向后端再补一条
+          if (!reachedEnd) fetchNextRows({ reset: false, limit: 1 });
+          else if (!rowsContainer.querySelector('.row')) updateSearchSummary();
+        }, 320);
+      }
+    } catch (err) {
+      btn.disabled = false;
+      btn.textContent = oldText || '保存图片/视频标注';
+      window.alert(`保存失败：${err?.message || err}`);
+    }
+  }
+
+  rowsContainer?.addEventListener('click', (e) => {
+    const target = e.target;
+    if (!(target instanceof Element)) return;
+
+    const markBtn = target.closest('.mark-btn');
+    if (markBtn && rowsContainer.contains(markBtn)) {
+      e.stopPropagation();
+      e.preventDefault();
+      const key = markBtn.dataset.markKey || '';
+      if (!key) return;
+      if (badSet.has(key)) badSet.delete(key);
+      else { badSet.add(key); goodSet.delete(key); }
+      saveMarks();
+      syncMarks();
+      scheduleAutoCheck(markBtn.closest('.row'));
+      return;
+    }
+
+    const banniuThumb = target.closest('.banniu-thumb-btn');
+    if (banniuThumb && rowsContainer.contains(banniuThumb)) {
+      e.preventDefault();
+      e.stopPropagation();
+      openBanniuViewer(banniuThumb.dataset.viewerSrc || banniuThumb.dataset.url || '');
+      return;
+    }
+
+    const thumbBtn = target.closest('.thumb-btn');
+    if (thumbBtn && rowsContainer.contains(thumbBtn)) {
+      e.preventDefault();
+      const markKey = thumbBtn.dataset.markKey || '';
+      const idx = flatList.findIndex((x) => x.markKey === markKey);
+      openViewer(idx >= 0 ? idx : 0);
+      return;
+    }
+
+    const finalBtn = target.closest('.final-btn');
+    if (finalBtn && rowsContainer.contains(finalBtn)) {
+      const rowEl = finalBtn.closest('.row');
+      if (!rowEl) return;
+      const val = finalBtn.dataset.approved || '';
+      rowEl.dataset.finalApproved = rowEl.dataset.finalApproved === val ? '' : val;
+      // 切换为「不通过」以外的状态时移除必填红边
+      if (rowEl.dataset.finalApproved !== 'false') {
+        rowEl.querySelector('.review-reason')?.classList.remove('invalid');
+      }
+      syncFinalButtons(rowEl);
+      syncFinalSuggestMatched(rowEl);
+      scheduleAutoCheck(rowEl);
+      return;
+    }
+
+    const saveBtn = target.closest('.save-media-btn');
+    if (saveBtn && rowsContainer.contains(saveBtn)) {
+      handleSaveMedia(saveBtn);
+      return;
+    }
+  });
+
+  rowsContainer?.addEventListener('input', (e) => {
+    const target = e.target;
+    if (!(target instanceof Element)) return;
+    if (target.matches('.review-reason')) {
+      const rowEl = target.closest('.row');
+      if (!rowEl) return;
+      // 用户开始输入后清除"必填未填"红边提示
+      if ((target.value || '').trim()) target.classList.remove('invalid');
+      const finalVal = rowEl.dataset.finalApproved || '';
+      // 只有"审核不通过"时备注才参与判定，其他状态重跑没意义。
+      if (finalVal === 'false') scheduleAutoCheck(rowEl, 700);
+    }
   });
 
   loadMarks();
-  applyAllFilters();
   syncMarks();
+  reloadRows();
 })();
 </script>
 </body>

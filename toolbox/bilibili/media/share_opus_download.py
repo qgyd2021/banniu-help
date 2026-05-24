@@ -5,6 +5,8 @@ import re
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
+import requests
+
 from toolbox.bilibili.media.share_download_base import BilibiliShareDownloadBase
 
 
@@ -342,7 +344,7 @@ class ShareOpusDownload(BilibiliShareDownloadBase):
         }
 
     def get_opus_meta_by_html(self, final_url: str):
-        response = self.session.get(final_url, timeout=30)
+        response = requests.get(final_url, headers=self.headers, timeout=30)
         if response.status_code != 200:
             raise AssertionError(f"request failed; status_code: {response.status_code}, final_url: {final_url}")
         if self.looks_like_captcha_or_risk(response):
@@ -473,7 +475,7 @@ def main():
     share_text = """"
 https://b23.tv/oBke03t
     """
-    # share_text = """"
+#     share_text = """"
 # https://b23.tv/6UGNFEQ
 #     """
     try:

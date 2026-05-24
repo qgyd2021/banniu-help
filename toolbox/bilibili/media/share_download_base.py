@@ -54,7 +54,7 @@ class BilibiliShareDownloadBaseRestful(object):
         return js
 
     def get_final_url_by_share_url(self, share_url: str) -> str:
-        response = self.session.get(share_url, timeout=30)
+        response = self.session.get(share_url, headers=self.headers, timeout=30)
         return response.url
 
 

@@ -286,8 +286,10 @@ def main() -> None:
     client = ShareMediaDownload()
 
     share_text = """
-我没有orange为[迈从 Ace 68 V2 有线…]发布了一篇得物评价，https://dw4.co/t/A/1v2jx3B5v点开链接，快来看吧！
-    """
+https://dw4.co/t/A/1vQO3OAYQ
+
+
+"""
     result = client.get_post_meta_by_share_text(share_text)
     print("post_meta:")
     print(json.dumps(result, ensure_ascii=False, indent=2))

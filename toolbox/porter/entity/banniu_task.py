@@ -18,7 +18,6 @@ class BanniuTaskFormatted(BaseModel):
     task_id_int: Optional[int] = Field(default=None, alias="taskId(int)")
     task_id_str: Optional[str] = Field(default=None, alias="taskId(str)")
 
-    share_text: Optional[str] = Field(default=None, alias="晒单内容链接")
     creator: Optional[str] = Field(default=None, alias="创建人")
     executor: Optional[str] = Field(default=None, alias="执行人")
     created_at: Optional[str] = Field(default=None, alias="创建时间")
@@ -26,6 +25,9 @@ class BanniuTaskFormatted(BaseModel):
     task_status: Optional[str] = Field(default=None, alias="任务状态")
     create_type: Optional[str] = Field(default=None, alias="创建类型")
     title: Optional[str] = Field(default=None, alias="标题")
+
+    share_text: Optional[str] = Field(default=None, alias="内容链接")
+    image_urls: Optional[str] = Field(default=None, alias="社媒平台主页截图")
 
     ignore_address_warning: Optional[str] = Field(default=None, alias="是否忽略地址解析警告")
     receiver_name_for_query: Optional[str] = Field(default=None, alias="收货人（用于查询）")
@@ -41,6 +43,8 @@ class BanniuTaskFormatted(BaseModel):
     publish_channel: Optional[str] = Field(default=None, alias="发布渠道")
     product_model: Optional[str] = Field(default=None, alias="产品型号")
     activity_desc: Optional[str] = Field(default=None, alias="活动简介")
+
+    purchase_info: Optional[str] = Field(default=None, alias="购买商品信息（旺店通仅查看）")
 
     # 自动审核分数（注意：你后续已声明不作为新评分来源，这里仅建模存档）
     # text_review_score_auto: Optional[ScalarValue] = Field(default=None, alias="文字审核（自动）")

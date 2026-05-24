@@ -60,7 +60,7 @@ def main():
 #
 #     """
     share_text = """
-    https://b23.tv/6UGNFEQ
+https://b23.tv/rr6HPsb
         """
     # share_text = """
     # https://b23.tv/oBke03t
