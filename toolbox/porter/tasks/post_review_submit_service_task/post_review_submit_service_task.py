@@ -237,6 +237,20 @@ class PostReviewSubmitServiceTask(BaseTask, TaskJsonUtils):
         return "none"
 
     @staticmethod
+    def _extract_platform(payload: Dict[str, Any]) -> Optional[str]:
+        """从 payload 提取 platform：仅从 post_meta.platform 取。
+
+        post_meta 缺失、不是 dict 或 platform 为空时返回 ``None``，
+        让上层（前端 / 索引）按"未知平台"语义处理，**不再回退到目录名**
+        （目录名只是流水线 step 的路由分类，不能等同于真实 platform）。
+        """
+        pm = payload.get("post_meta")
+        if not isinstance(pm, dict):
+            return None
+        p = str(pm.get("platform") or "").strip()
+        return p or None
+
+    @staticmethod
     def _parse_dt(s: Optional[str]) -> Optional[float]:
         if not s:
             return None
@@ -273,7 +287,7 @@ class PostReviewSubmitServiceTask(BaseTask, TaskJsonUtils):
                 payload = _read_task_json(fp.as_posix())
                 if not payload:
                     continue
-                platform = fp.parent.name
+                platform = self._extract_platform(payload) or ""
                 task_formatted = BanniuTaskFormatted.from_dict(payload.get("task_formatted"))
                 task_id = task_formatted.task_id_str or ""
                 if not task_id:
@@ -334,7 +348,7 @@ class PostReviewSubmitServiceTask(BaseTask, TaskJsonUtils):
         """把一份已读出的 task payload 转成模板用的 row dict。仅做字段映射，不 IO。"""
         if not isinstance(payload, dict):
             return None
-        platform = fp.parent.name
+        platform = self._extract_platform(payload)
         task_formatted = BanniuTaskFormatted.from_dict(payload.get("task_formatted"))
         post_meta = PostMeta.from_dict(payload.get("post_meta"))
         post_review = PostReview.from_dict(payload.get("post_review"))
@@ -600,9 +614,9 @@ class PostReviewSubmitServiceTask(BaseTask, TaskJsonUtils):
 
         image_url_set: set[str] = set()
         video_url_set: set[str] = set()
-        top_post_meta = js.get("post_meta")
-        if not isinstance(top_post_meta, dict):
-            raise HTTPException(status_code=400, detail="missing top-level post_meta")
+        # 「无贴子内容」的任务（blank / 未知平台、无可解析的链接）允许提交：
+        # 此时 post_meta 缺失或为空，视为没有任何图片/视频，后续计数都是 0。
+        top_post_meta = js.get("post_meta") if isinstance(js.get("post_meta"), dict) else {}
         if isinstance(top_post_meta.get("image_urls"), list):
             for u in top_post_meta.get("image_urls") or []:
                 if isinstance(u, str) and u.startswith("http"):
@@ -685,28 +699,27 @@ class PostReviewSubmitServiceTask(BaseTask, TaskJsonUtils):
         }
 
     def api_submit_row(self, payload: SubmitRowRequest) -> Dict[str, Any]:
-        data_root = project_path.resolve()
         step_target_root = self.target_dir.resolve()
         src = self.resolve_source_file(payload.source_file)
-        rel = src.relative_to(data_root)
-
-        target = step_target_root / rel
 
         # 用「是否为 None」区分：未传 media_marks 键则为 None。
         do_media = payload.media_marks is not None
         if not do_media:
             raise HTTPException(status_code=400, detail="请提交 media_marks（保存图片/视频标注）")
 
-        # 仅在「源文件已不存在」时视为已归档；避免目标目录残留同名文件导致无法保存标注。
         if not src.exists() or not src.is_file():
-            if target.exists() and target.is_file():
-                return {
-                    "ok": True,
-                    "already_submitted": True,
-                    "source_file": src.as_posix(),
-                    "target_file": target.as_posix(),
-                }
             raise HTTPException(status_code=404, detail=f"source file not found: {src.as_posix()}")
+
+        # 仅在「源文件已不存在」时视为已归档；避免目标目录残留同名文件导致无法保存标注。
+        # if not src.exists() or not src.is_file():
+        #     if target.exists() and target.is_file():
+        #         return {
+        #             "ok": True,
+        #             "already_submitted": True,
+        #             "source_file": src.as_posix(),
+        #             "target_file": target.as_posix(),
+        #         }
+        #     raise HTTPException(status_code=404, detail=f"source file not found: {src.as_posix()}")
 
         try:
             with open(src.as_posix(), "r", encoding="utf-8") as f:
@@ -715,6 +728,9 @@ class PostReviewSubmitServiceTask(BaseTask, TaskJsonUtils):
             raise HTTPException(status_code=400, detail=f"source file is not valid json: {exc}") from exc
         if not isinstance(js, dict):
             raise HTTPException(status_code=400, detail="source file is not valid json object")
+
+        platform = js.get("post_meta", dict()).get("platform", "unknown")
+        target = step_target_root / platform / src.name
 
         post_review = self.build_post_review_with_marks(
             js=js,
@@ -794,7 +810,7 @@ class PostReviewSubmitServiceTask(BaseTask, TaskJsonUtils):
                     continue
                 seen_tids.add(tid)
 
-                platform = fp.parent.name
+                platform = self._extract_platform(payload_dict) or ""
                 if not self._match_filter(payload_dict, task_formatted, platform, payload):
                     continue
                 matched_scanned += 1

@@ -85,7 +85,11 @@
     <div class="post-main">
       <div class="panel-body post-main-left">
         <div class="post-head-row">
+          {% if platform %}
           <span class="platform-badge platform-{{ platform }}">{{ {'douyin':'抖音','xiaohongshu':'小红书','bilibili':'B站','kuaishou':'快手','weibo':'微博','dewu':'得物','xiaoheihe':'小黑盒'}.get(platform, platform) }}</span>
+          {% else %}
+          <span class="platform-badge platform-unknown">未知</span>
+          {% endif %}
           <span class="media-count-badge">图 {{ pd.image_count or 0 }} · 视频 {{ pd.video_count or 0 }}</span>
           <span class="final-chip {% if row.final_approved_key == 'true' %}pass{% elif row.final_approved_key == 'false' %}reject{% endif %}">
             终审：{% if row.final_approved_key == 'true' %}已通过{% elif row.final_approved_key == 'false' %}未通过{% else %}未决策{% endif %}

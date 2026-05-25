@@ -1,13 +1,16 @@
 #!/usr/bin/python3
 # -*- coding: utf-8 -*-
+import logging
 import re
 import json
 from pydantic import BaseModel, ConfigDict, Field
-from typing import Any, Dict, List, Union
+from typing import Any, Dict, List, Optional, Union
 
 import requests
 
 from toolbox.utils.utils import when_error
+
+logger = logging.getLogger("toolbox")
 
 CountValue = Union[int, float, str]
 
@@ -58,22 +61,68 @@ class PostMeta(BaseModel):
 
 
 class ShareMediaDownloadRestful(object):
+    # 桌面 Chrome UA：抖音对移动端 UA 更容易跳到 App 唤起页或风控质询页，
+    # 桌面 UA 直出 SSR HTML（含 `_ROUTER_DATA`）的概率更高。
     headers = {
         "User-Agent": (
-            "Mozilla/5.0 (iPhone; CPU iPhone OS 17_2 like Mac OS X) "
-            "AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 "
-            "Mobile/15E148 Safari/604.1"
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+            "(KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
         ),
+        "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
+        "Referer": "https://www.douyin.com/",
     }
 
+    # 抖音 share 页面的 PoW 反爬质询页特征：
+    # 页面只有 2~3KB，没有 `_ROUTER_DATA`，含 "Please wait..." 与 argus-csp-token 内联脚本，
+    # 浏览器侧需要计算 SHA256 工作量证明并写 cookie 才能 reload 拿到真页面，
+    # `requests` 无法执行 JS，命中即视为不可解析。
+    _ANTI_CRAWL_KEYWORDS: List[str] = [
+        "argus-csp-token",
+        "Please wait...",
+    ]
+
+    def __init__(self) -> None:
+        # 用 Session 复用 cookie：预热 douyin.com 拿到 ttwid 等 cookie 后，
+        # 后续对 iesdouyin.com/share/... 的请求风险评分会显著降低。
+        self._session: Optional[requests.Session] = None
+        self._session_warmed: bool = False
+
+    def _ensure_session(self) -> requests.Session:
+        if self._session is None:
+            self._session = requests.Session()
+            self._session.headers.update(self.headers)
+        if not self._session_warmed:
+            self._warmup_session(self._session)
+            self._session_warmed = True
+        return self._session
+
+    @classmethod
+    def _warmup_session(cls, session: requests.Session) -> None:
+        """预热 session：访问抖音主站，让服务端下发 ttwid 等 cookie。
+
+        预热失败不视为致命错误：仅记录 warning，后续仍按"无 cookie"请求继续尝试。
+        """
+        try:
+            session.get("https://www.douyin.com/", timeout=30)
+        except requests.RequestException as exc:
+            logger.warning(f"douyin warmup session failed: {exc}")
+
+    @classmethod
+    def is_anti_crawl_page(cls, html: str) -> bool:
+        if not html:
+            return True
+        if "_ROUTER_DATA" in html:
+            return False
+        return any(key in html for key in cls._ANTI_CRAWL_KEYWORDS)
+
     def get_final_url_by_share_url(self, share_url: str) -> str:
-        response = requests.get(share_url, headers=self.headers,
-                                allow_redirects=True,
-                                timeout=30)
+        session = self._ensure_session()
+        response = session.get(share_url, allow_redirects=True, timeout=30)
         return response.url
 
-    def get_text_by_url(self, url: str):
-        response = requests.get(url, headers=self.headers, allow_redirects=True, timeout=30)
+    def get_text_by_url(self, url: str) -> str:
+        session = self._ensure_session()
+        response = session.get(url, allow_redirects=True, timeout=30)
         if response.status_code != 200:
             raise AssertionError(f"request failed; status_code: {response.status_code}, url: {url}")
         return response.text
@@ -95,6 +144,9 @@ class ShareMediaDownload(ShareMediaDownloadRestful):
 
     def get_router_data_by_final_url(self, final_url: str) -> Dict[str, Any]:
         html = self.get_text_by_url(final_url)
+        if self.is_anti_crawl_page(html):
+            logger.warning(f"douyin 命中反爬质询页（Please wait...），无法解析 SSR HTML； url: {final_url}")
+            return {}
         pattern = re.compile(r"window\._ROUTER_DATA\s*=\s*(.*?)</script>", flags=re.DOTALL)
         match = pattern.search(html)
         if not match:
@@ -138,17 +190,24 @@ class ShareMediaDownload(ShareMediaDownloadRestful):
         else:
             aweme_type_ = aweme_type
         base_url = f"https://www.iesdouyin.com/share/{aweme_type_}/{aweme_id}"
-        candidate_urls = [
-            final_url,
-            final_url.split("?", 1)[0],
-            final_url.split("?", 1)[0].rstrip("/"),
+        # 按"最容易直接拿到 SSR HTML"的形态由前到后排，便于在前面就命中并跳出循环。
+        # 经验：无尾斜杠 + 无 query 的 base_url 触发反爬质询页的概率最低。
+        ordered_candidates = [
             base_url,
             f"{base_url}/",
+            final_url.split("?", 1)[0].rstrip("/"),
+            final_url.split("?", 1)[0],
+            final_url,
         ]
+        seen: set = set()
+        candidate_urls: List[str] = []
+        for url in ordered_candidates:
+            if url and url not in seen:
+                seen.add(url)
+                candidate_urls.append(url)
 
         post_meta = None
-        for url in dict.fromkeys(candidate_urls):
-            # print(f"url: {url}")
+        for url in candidate_urls:
             router_data = self.get_router_data_by_final_url(url)
             if len(router_data) == 0:
                 continue
@@ -258,7 +317,7 @@ def main() -> None:
 
     share_text = """
 
-https://v.douyin.com/5FH50u52BL4/
+https://v.douyin.com/Eay4JAHX-8M/
 
 """
     result = client.get_post_meta_by_share_text(share_text)

@@ -1093,6 +1093,72 @@
   const filterFinalApproved = document.getElementById('filterFinalApproved');
   const filterResetBtn = document.getElementById('filterResetBtn');
 
+  // 把筛选条件缓存到 sessionStorage：刷新页面后自动还原，关闭标签页则自然清空。
+  // bump key 后缀（v1 → v2 → ...）即可在筛选结构升级时丢弃旧值。
+  // v3: 创建时间 input 重新回到 datetime-local，旧 v2 的 "yyyy-MM-dd" 不再兼容。
+  const FILTERS_STORAGE_KEY = 'post_review_submit_filters_v3';
+
+  function saveFiltersToStorage() {
+    try {
+      const data = {
+        keyword: searchKeyword?.value || '',
+        product_model: filterProductModel?.value || '',
+        created_start: filterCreatedStart?.value || '',
+        created_end: filterCreatedEnd?.value || '',
+        review_status: filterReviewStatus?.value || '',
+        task_status: filterTaskStatus?.value || '',
+        final_approved: filterFinalApproved?.value || '',
+      };
+      sessionStorage.setItem(FILTERS_STORAGE_KEY, JSON.stringify(data));
+    } catch (err) {
+      // sessionStorage 可能被禁用或配额耗尽，忽略即可。
+    }
+  }
+
+  function restoreFiltersFromStorage() {
+    let data = null;
+    try {
+      const raw = sessionStorage.getItem(FILTERS_STORAGE_KEY);
+      if (!raw) return;
+      data = JSON.parse(raw);
+    } catch (err) {
+      return;
+    }
+    if (!data || typeof data !== 'object') return;
+    if (searchKeyword && typeof data.keyword === 'string') searchKeyword.value = data.keyword;
+    if (filterProductModel && typeof data.product_model === 'string') filterProductModel.value = data.product_model;
+    if (filterCreatedStart && typeof data.created_start === 'string') filterCreatedStart.value = data.created_start;
+    if (filterCreatedEnd && typeof data.created_end === 'string') filterCreatedEnd.value = data.created_end;
+    if (filterReviewStatus && typeof data.review_status === 'string') filterReviewStatus.value = data.review_status;
+    if (filterTaskStatus && typeof data.task_status === 'string') filterTaskStatus.value = data.task_status;
+    if (filterFinalApproved && typeof data.final_approved === 'string') filterFinalApproved.value = data.final_approved;
+  }
+
+  // 按天筛选友好：用户在 datetime-local 上选完日期那一刻，把时分自动设为 defaultTime
+  // （起点 00:00、终点 23:59，闭区间刚好覆盖整天）。
+  // 用户后续手动改过时分后，就不再被自动覆盖——保留精细到分钟的选择能力。
+  function setupDateAutoTime(input, defaultTime) {
+    if (!input) return;
+    let lastValue = input.value || '';
+    input.addEventListener('input', () => {
+      const newValue = input.value || '';
+      if (!newValue) {
+        lastValue = '';
+        return;
+      }
+      const [newDate, newTime = ''] = newValue.split('T');
+      const [oldDate] = lastValue.split('T');
+      // 只在「日期变了 + 当前时分不是默认值」时才覆盖：
+      // - 首次选日期时 oldDate='', 命中覆盖；
+      // - 改日期时 oldDate != newDate, 命中覆盖；
+      // - 仅改时分时 oldDate == newDate, 不覆盖。
+      if (newDate !== oldDate && newTime !== defaultTime) {
+        input.value = `${newDate}T${defaultTime}`;
+      }
+      lastValue = input.value;
+    });
+  }
+
   function parseCreatedAt(s) {
     const raw = String(s || '').trim();
     if (!raw) return null;
@@ -1309,6 +1375,7 @@
   }
 
   function reloadRows() {
+    saveFiltersToStorage();
     fetchNextRows({ reset: true, limit: PAGE_SIZE });
   }
 
@@ -1503,6 +1570,9 @@
 
   loadMarks();
   syncMarks();
+  restoreFiltersFromStorage();
+  setupDateAutoTime(filterCreatedStart, '00:00');
+  setupDateAutoTime(filterCreatedEnd, '23:59');
   reloadRows();
 })();
 </script>

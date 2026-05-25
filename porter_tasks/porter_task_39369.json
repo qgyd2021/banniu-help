@@ -3,7 +3,7 @@
     "enable": true,
     "type": "banniu_task_download",
     "project_id": "39369",
-    "check_interval": 3600,
+    "check_interval": 21600,
     "output_dir": "temp/banniu_39369/step_1_banniu_task_download/tasks",
     "last_fetch_tasks": "temp/banniu_39369/step_1_banniu_task_download/last_fetch_tasks.json",
     "last_fetch_time_txt": "temp/banniu_39369/step_1_banniu_task_download/last_fetch_time.txt"
@@ -223,7 +223,8 @@
       ["kuaishou", "temp/banniu_39369/step_6_post_review_submit/kuaishou", "temp/banniu_39369/step_7_post_review_final/kuaishou"],
       ["bilibili", "temp/banniu_39369/step_6_post_review_submit/bilibili", "temp/banniu_39369/step_7_post_review_final/bilibili"],
       ["xiaoheihe", "temp/banniu_39369/step_6_post_review_submit/xiaoheihe", "temp/banniu_39369/step_7_post_review_final/xiaoheihe"],
-      ["weibo", "temp/banniu_39369/step_6_post_review_submit/weibo", "temp/banniu_39369/step_7_post_review_final/weibo"]
+      ["weibo", "temp/banniu_39369/step_6_post_review_submit/weibo", "temp/banniu_39369/step_7_post_review_final/weibo"],
+      ["unknown", "temp/banniu_39369/step_6_post_review_submit/unknown", "temp/banniu_39369/step_7_post_review_final/unknown"]
     ]
   },
   {
@@ -239,7 +240,8 @@
       ["kuaishou", "temp/banniu_39369/step_7_post_review_final/kuaishou", "temp/banniu_39369/step_8_finished/kuaishou"],
       ["bilibili", "temp/banniu_39369/step_7_post_review_final/bilibili", "temp/banniu_39369/step_8_finished/bilibili"],
       ["xiaoheihe", "temp/banniu_39369/step_7_post_review_final/xiaoheihe", "temp/banniu_39369/step_8_finished/xiaoheihe"],
-      ["weibo", "temp/banniu_39369/step_7_post_review_final/weibo", "temp/banniu_39369/step_8_finished/weibo"]
+      ["weibo", "temp/banniu_39369/step_7_post_review_final/weibo", "temp/banniu_39369/step_8_finished/weibo"],
+      ["unknown", "temp/banniu_39369/step_7_post_review_final/unknown", "temp/banniu_39369/step_8_finished/unknown"]
     ],
     "column_name_to_key": {
       "审核状态": "post_review_final.approved_in_str",
