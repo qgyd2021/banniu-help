@@ -4,7 +4,7 @@ from typing import Dict
 
 import requests
 from toolbox.weibo.weibo_client import WeiboClient
-from toolbox.weibo.media.share_media_download import ShareMediaDownload
+from toolbox.weibo.media.share_media_download_ import ShareMediaDownload
 
 
 class FreshImageUrl(WeiboClient):
@@ -86,7 +86,7 @@ class FreshVideoUrl(WeiboClient):
         post_meta = self.share_client.get_post_meta_by_share_url(share_url)
 
         video_urls = post_meta["video_urls"]
-        video_url = video_urls[video_index]
+        video_url = video_urls[video_index]["video_url"]
         response = requests.request(
             "GET",
             video_url,

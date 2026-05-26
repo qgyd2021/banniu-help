@@ -93,7 +93,7 @@ class BanNiuRestfulClient(ParamsSingleton):
 
         star_created: yyyy-MM-dd HH:mm:ss
         end_created: yyyy-MM-dd HH:mm:ss
-        task_status: 0, 等处理; 1, 已完成; 2, 处理中; 3, 暂停中; 4, 已关闭
+        task_status: 0, 待处理; 1, 已完成; 2, 处理中; 3, 暂停中; 4, 已关闭
         """
         params = {
             "method": "task.list",

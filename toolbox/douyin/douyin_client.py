@@ -47,12 +47,25 @@ class DouyinClient(ParamsSingleton):
             self._session.cookies = requests.utils.cookiejar_from_dict(self.cookies)
         return self._session
 
+    @staticmethod
+    def get_new_session():
+        return requests.Session()
+
     @property
     def async_session(self):
         if not self._async_session.cookies:
             self._async_session.headers = self.headers
             self._async_session.cookies = httpx.Cookies(self.cookies)
         return self._async_session
+
+    def get_new_async_session(self):
+        session = httpx.AsyncClient(
+            http2=True,
+            limits=httpx.Limits(max_keepalive_connections=100, keepalive_expiry=100),
+            headers=self.headers,
+            cookies=self.cookies,
+        )
+        return session
 
     @classmethod
     def get_qrcode(cls):

@@ -6,9 +6,12 @@ import json
 from pydantic import BaseModel, ConfigDict, Field
 from typing import Any, Dict, List, Optional, Union
 
+import cacheout
 import requests
 
-from toolbox.utils.utils import when_error
+# from toolbox.gradio.utils import http_proxy as requests
+from toolbox.douyin.utils.cookies import NonceSignRefererUtils
+from toolbox.utils.utils import when_error, when_expected_error, ExpectedError
 
 logger = logging.getLogger("toolbox")
 
@@ -60,9 +63,8 @@ class PostMeta(BaseModel):
         return self.model_dump()
 
 
-class ShareMediaDownloadRestful(object):
-    # 桌面 Chrome UA：抖音对移动端 UA 更容易跳到 App 唤起页或风控质询页，
-    # 桌面 UA 直出 SSR HTML（含 `_ROUTER_DATA`）的概率更高。
+class ShareMediaDownloadRestful(NonceSignRefererUtils):
+
     headers = {
         "User-Agent": (
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
@@ -72,40 +74,13 @@ class ShareMediaDownloadRestful(object):
         "Referer": "https://www.douyin.com/",
     }
 
-    # 抖音 share 页面的 PoW 反爬质询页特征：
-    # 页面只有 2~3KB，没有 `_ROUTER_DATA`，含 "Please wait..." 与 argus-csp-token 内联脚本，
-    # 浏览器侧需要计算 SHA256 工作量证明并写 cookie 才能 reload 拿到真页面，
-    # `requests` 无法执行 JS，命中即视为不可解析。
     _ANTI_CRAWL_KEYWORDS: List[str] = [
         "argus-csp-token",
         "Please wait...",
     ]
 
     def __init__(self) -> None:
-        # 用 Session 复用 cookie：预热 douyin.com 拿到 ttwid 等 cookie 后，
-        # 后续对 iesdouyin.com/share/... 的请求风险评分会显著降低。
-        self._session: Optional[requests.Session] = None
-        self._session_warmed: bool = False
-
-    def _ensure_session(self) -> requests.Session:
-        if self._session is None:
-            self._session = requests.Session()
-            self._session.headers.update(self.headers)
-        if not self._session_warmed:
-            self._warmup_session(self._session)
-            self._session_warmed = True
-        return self._session
-
-    @classmethod
-    def _warmup_session(cls, session: requests.Session) -> None:
-        """预热 session：访问抖音主站，让服务端下发 ttwid 等 cookie。
-
-        预热失败不视为致命错误：仅记录 warning，后续仍按"无 cookie"请求继续尝试。
-        """
-        try:
-            session.get("https://www.douyin.com/", timeout=30)
-        except requests.RequestException as exc:
-            logger.warning(f"douyin warmup session failed: {exc}")
+        super().__init__()
 
     @classmethod
     def is_anti_crawl_page(cls, html: str) -> bool:
@@ -116,15 +91,36 @@ class ShareMediaDownloadRestful(object):
         return any(key in html for key in cls._ANTI_CRAWL_KEYWORDS)
 
     def get_final_url_by_share_url(self, share_url: str) -> str:
-        session = self._ensure_session()
+        session = requests.Session()
+        session.request(method="GET", url="https://www.douyin.com/")
         response = session.get(share_url, allow_redirects=True, timeout=30)
         return response.url
 
-    def get_text_by_url(self, url: str) -> str:
-        session = self._ensure_session()
-        response = session.get(url, allow_redirects=True, timeout=30)
+    @cacheout.memoize(ttl=10)
+    def get_text_by_url(self, url: str) -> Optional[str]:
+        response = requests.get(url, headers=self.headers,
+                                # allow_redirects=False,
+                                timeout=30)
         if response.status_code != 200:
-            raise AssertionError(f"request failed; status_code: {response.status_code}, url: {url}")
+            raise AssertionError(f"request failed; status_code: {response.status_code}, text: {response.text}, url: {url}")
+        return response.text
+
+    @cacheout.memoize(ttl=10)
+    def get_text_by_url_with_ac(self, url: str) -> str:
+        session = requests.Session()
+        _ = session.request(method="GET", url="https://www.douyin.com/", headers=self.headers)
+        session.cookies = requests.utils.cookiejar_from_dict(self.ac_nonce_signature)
+        response = session.get(
+            url,
+            headers={
+                **self.headers,
+                "Referer": url,
+            },
+            allow_redirects=True,
+            timeout=30
+        )
+        if response.status_code != 200:
+            raise AssertionError(f"request failed; status_code: {response.status_code}, text: {response.text}, url: {url}")
         return response.text
 
 
@@ -140,27 +136,58 @@ class ShareMediaDownload(ShareMediaDownloadRestful):
             match = re.search(pattern, text, flags=re.IGNORECASE)
             if match is not None:
                 return match.group(0).rstrip(".,;)")
-        raise AssertionError(f"no share url found; text: {text}")
+        raise ExpectedError(status_code=60500, message="no share url found; text: {text}")
 
-    def get_router_data_by_final_url(self, final_url: str) -> Dict[str, Any]:
-        html = self.get_text_by_url(final_url)
-        if self.is_anti_crawl_page(html):
-            logger.warning(f"douyin 命中反爬质询页（Please wait...），无法解析 SSR HTML； url: {final_url}")
-            return {}
+    @staticmethod
+    @when_error(return_value=None)
+    def get_aweme_by_html(html: str) -> str:
+        pattern = re.compile(
+            r"<script[^>]*>\s*self\.__pace_f\.push\((.*?)\)\s*</script>",
+            flags=re.DOTALL,
+        )
+        for match in pattern.finditer(html):
+            raw_call_args = (match.group(1) or "").strip()
+            if "awemeId" not in raw_call_args or "authorInfo" not in raw_call_args:
+                continue
+            try:
+                call_args = json.loads(raw_call_args)
+            except json.JSONDecodeError:
+                continue
+            if not isinstance(call_args, list) or len(call_args) < 2:
+                continue
+            payload = call_args[1]
+            if not isinstance(payload, str) or "awemeId" not in payload:
+                continue
+            # payload 形如：7:[...json...]，冒号前是 React Flight 行号。
+            if ":" not in payload:
+                continue
+            _, payload_json = payload.split(":", 1)
+            try:
+                data = json.loads(payload_json)
+            except json.JSONDecodeError:
+                continue
+            if not isinstance(data, list) or len(data) < 4 or not isinstance(data[3], dict):
+                continue
+            aweme = data[3].get("aweme")
+            if not isinstance(aweme, dict):
+                continue
+            detail = aweme.get("detail")
+            if not isinstance(detail, dict):
+                continue
+            result = detail
+            # result = json.dumps(detail, ensure_ascii=False, indent=2)
+            return result
+        return None
+
+    @when_error(return_value=None)
+    def get_router_data_by_html(self, html: str) -> Dict[str, Any]:
         pattern = re.compile(r"window\._ROUTER_DATA\s*=\s*(.*?)</script>", flags=re.DOTALL)
         match = pattern.search(html)
-        if not match:
-            return {}
-        raw = (match.group(1) or "").strip()
-        if not raw:
-            return {}
-        try:
-            js = json.loads(raw)
-        except json.JSONDecodeError:
-            return {}
-        if isinstance(js, dict):
-            return js
-        return {}
+        if match is None:
+            return None
+        raw = match.group(1)
+        js = json.loads(raw)
+        return js
 
     def get_aweme_type_and_id_by_final_url(self, final_url: str):
         match = re.search(r"/(video|note|slides)/(\d+)", final_url)
@@ -179,45 +206,38 @@ class ShareMediaDownload(ShareMediaDownloadRestful):
 
     def get_post_meta_by_share_text(self, share_text: str) -> dict:
         share_url = self.get_share_url_by_share_text(share_text)
-        # print(f"share_url: {share_url}")
+        result = self.get_post_meta_by_share_url(share_url)
+        return result
+
+    @when_expected_error(return_value=None)
+    def get_post_meta_by_share_url(self, share_url: str) -> dict:
         final_url = self.get_final_url_by_share_url(share_url)
-        # print(f"final_url: {final_url}")
-
-        aweme_type, aweme_id = self.get_aweme_type_and_id_by_final_url(final_url)
-
-        if aweme_type == "slides":
-            aweme_type_ = "note"
-        else:
-            aweme_type_ = aweme_type
-        base_url = f"https://www.iesdouyin.com/share/{aweme_type_}/{aweme_id}"
-        # 按"最容易直接拿到 SSR HTML"的形态由前到后排，便于在前面就命中并跳出循环。
-        # 经验：无尾斜杠 + 无 query 的 base_url 触发反爬质询页的概率最低。
-        ordered_candidates = [
-            base_url,
-            f"{base_url}/",
-            final_url.split("?", 1)[0].rstrip("/"),
-            final_url.split("?", 1)[0],
-            final_url,
-        ]
-        seen: set = set()
-        candidate_urls: List[str] = []
-        for url in ordered_candidates:
-            if url and url not in seen:
-                seen.add(url)
-                candidate_urls.append(url)
 
         post_meta = None
-        for url in candidate_urls:
-            router_data = self.get_router_data_by_final_url(url)
-            if len(router_data) == 0:
-                continue
-            post_meta = self.build_post_meta_from_router_data_branch_1(router_data)
-            if post_meta is not None:
-                final_url = url
-                break
+        if post_meta is None:
+            html = self.get_text_by_url_with_ac(final_url)
+            if len(html) == 0:
+                raise ExpectedError(status_code=60500, message="empty html")
+            if self.is_anti_crawl_page(html):
+                raise ExpectedError(status_code=60500, message="is_anti_crawl_page")
+            aweme = self.get_aweme_by_html(html)
+            if aweme is not None:
+                post_meta = self.build_post_meta_from_aweme_branch_1(aweme)
 
         if post_meta is None:
-            raise AssertionError(f"未成功解析到信息；share_url: {share_url}")
+            html = self.get_text_by_url(final_url)
+            # print(f"html2: {html}")
+            if len(html) == 0:
+                raise ExpectedError(status_code=60500, message="empty html")
+            if self.is_anti_crawl_page(html):
+                raise ExpectedError(status_code=60500, message="is_anti_crawl_page")
+            router_data = self.get_router_data_by_html(html)
+            if router_data is not None:
+                post_meta = self.build_post_meta_from_router_data_branch_1(router_data)
+
+        if post_meta is None:
+            raise ExpectedError(status_code=60500, message=f"未成功解析到信息；share_url: {share_url}")
+
         post_meta.share_url = share_url
         post_meta.final_url = final_url
         return post_meta.to_dict()
@@ -237,7 +257,7 @@ class ShareMediaDownload(ShareMediaDownloadRestful):
         https://v.douyin.com/9Ucbd_kd-JI/
 
         """
-        # print(json.dumps(router_data, ensure_ascii=False, indent=2))
+        # print(f"router_data: {json.dumps(router_data, ensure_ascii=False, indent=2)}")
 
         loader_data: dict = router_data.get("loaderData")
         if loader_data is None:
@@ -311,13 +331,64 @@ class ShareMediaDownload(ShareMediaDownloadRestful):
 
         return post_meta
 
+    @when_error(return_value=None)
+    def build_post_meta_from_aweme_branch_1(self, aweme: dict) -> PostMeta:
+        """
+        https://v.douyin.com/Eay4JAHX-8M/
+        """
+        # print(f"aweme: {json.dumps(aweme, ensure_ascii=False, indent=2)}")
+
+        post_meta = PostMeta()
+        post_meta.post_type = "build_post_meta_from_aweme_branch_1"
+
+        aweme_type = aweme["awemeType"]
+        # aweme_type, 68 轮播图
+        # print(f"aweme_type: {aweme_type}")
+
+        desc = aweme["desc"]
+        tags = [e["hashtagName"] for e in aweme["textExtra"]]
+        tags = [tag for tag in tags if len(str(tag).strip()) > 0]
+        tags = list(sorted(tags, key=len, reverse=True))
+        for tag in tags:
+            desc = desc.lower().replace(f"#{str(tag).lower()}", "").strip()
+
+        post_meta.post_id = aweme["awemeId"]
+        post_meta.title = ""
+        post_meta.desc = desc
+        post_meta.tags = tags
+
+        post_meta.user_id = aweme["authorInfo"]["uid"] or aweme["authorInfo"]["secUid"]
+        post_meta.nickname = aweme["authorInfo"]["nickname"]
+
+        post_meta.liked_count = aweme["stats"]["diggCount"]
+        post_meta.collected_count = aweme["stats"]["collectCount"]
+        post_meta.comment_count = aweme["stats"]["commentCount"]
+        post_meta.share_count = aweme["stats"]["shareCount"]
+
+        if aweme_type not in (4,):
+            image_urls = list()
+            for image in aweme["images"]:
+                image_urls.append(image["urlList"][0])
+            post_meta.image_urls = image_urls
+
+        if aweme_type not in (68,):
+            video_url = aweme["video"]["playAddr"]["urlList"][0]
+            video_url = video_url.replace("playwm", "play")
+            cover_url = aweme["video"]["cover"]["urlList"][0]
+            video_urls = [
+                VideoMeta(cover_url=cover_url, video_url=video_url),
+            ]
+            post_meta.video_urls = video_urls
+
+        return post_meta
+
 
 def main() -> None:
     client = ShareMediaDownload()
 
     share_text = """
 
-https://v.douyin.com/Eay4JAHX-8M/
+https://v.douyin.com/_JoiSC7LeeM/
 
 """
     result = client.get_post_meta_by_share_text(share_text)

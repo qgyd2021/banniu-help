@@ -6,15 +6,11 @@ from datetime import datetime
 import json
 import logging
 from pathlib import Path
-import re
-import requests
 from zoneinfo import ZoneInfo
-
-from tenacity import before_sleep_log, retry, retry_if_exception_type, stop_after_attempt, wait_fixed
 
 from project_settings import project_path, time_zone_info
 from toolbox.douyin.douyin_client import DouyinClient
-from toolbox.exception import ExpectedError
+from exception import ExpectedError
 from toolbox.asyncio.cacheout import async_cache_decorator
 
 logger = logging.getLogger("toolbox")

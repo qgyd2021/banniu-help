@@ -16,6 +16,7 @@
   (rt.tags_match or [])|join(' '), (rt.tags_miss or [])|join(' ')
 ]|join(' ') %}
 {% set BANNIU_SPECIAL_KEYS = ['task_id', 'image_urls'] %}
+{% set editable_banniu_keys = row.editable_banniu_keys or [] %}
 <section class="row"
   data-source-file="{{ row.source_file }}"
   data-platform="{{ platform }}"
@@ -30,14 +31,25 @@
   data-has-review="{{ '1' if rd else '0' }}"
   data-final-approved="{% if rf.approved is sameas true %}true{% elif rf.approved is sameas false %}false{% else %}{% endif %}">
   {# 班牛信息：除 BANNIU_SPECIAL_KEYS 之外的字段一律按 banniu_data 原样动态展示，后端加字段无需改前端。 #}
-  <aside class="post-banniu">
-    <div class="panel-head">班牛信息</div>
+  <aside class="post-banniu" data-source-file="{{ row.source_file }}">
+    <div class="panel-head banniu-panel-head">
+      <span>班牛信息</span>
+      <div class="banniu-edit-actions">
+        <button type="button" class="banniu-cancel-btn" hidden>取消</button>
+        <button type="button" class="banniu-edit-btn" data-source-file="{{ row.source_file }}">编辑</button>
+      </div>
+    </div>
     <div class="panel-body">
       <div class="banniu-task-id">task_id：{{ task_id or '-' }}</div>
       <div class="banniu-list">
         {% for key, value in bd.items() %}
         {% if key not in BANNIU_SPECIAL_KEYS %}
-        <div class="banniu-kv">
+        {% set is_editable = key in editable_banniu_keys and not (value is mapping) and not (value is iterable and value is not string) %}
+        {% set raw_value = '' if value in (None, '') else value %}
+        <div class="banniu-kv"
+          data-banniu-key="{{ key }}"
+          data-editable="{{ '1' if is_editable else '0' }}"
+          data-original-value="{{ raw_value }}">
           <span class="k">{{ key }}</span>
           <span class="v">
             {%- if value is mapping -%}

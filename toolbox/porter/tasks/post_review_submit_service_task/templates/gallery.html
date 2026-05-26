@@ -110,6 +110,38 @@
       min-width: 0;
     }
     .post-banniu .panel-head { background: #fff7e6; color: #ad6800; }
+    .post-banniu .banniu-panel-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+    .post-banniu .banniu-edit-actions { display: flex; gap: 6px; }
+    .banniu-edit-btn, .banniu-cancel-btn {
+      height: 22px;
+      padding: 0 10px;
+      border-radius: 4px;
+      border: 1px solid #ad6800;
+      background: #fff;
+      color: #ad6800;
+      font-size: 11px;
+      font-weight: 600;
+      cursor: pointer;
+      line-height: 1;
+    }
+    .banniu-edit-btn:hover { background: #fff1d6; }
+    .banniu-edit-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+    .post-banniu.editing .banniu-edit-btn { border-color: #237804; color: #237804; background: #f6ffed; }
+    .post-banniu.editing .banniu-edit-btn:hover { background: #d9f7be; }
+    .banniu-cancel-btn { border-color: #d9d9d9; color: #595959; background: #fff; }
+    .banniu-cancel-btn:hover { background: #f5f5f5; }
+    .banniu-input {
+      width: 100%;
+      height: 24px;
+      padding: 0 6px;
+      border: 1px solid #d9d9d9;
+      border-radius: 4px;
+      font-size: 12px;
+      color: #1f2329;
+      background: #fff;
+      box-sizing: border-box;
+    }
+    .post-banniu.editing .banniu-kv[data-editable="1"] .v { padding: 0; }
     .post-banniu .banniu-task-id {
       font-size: 11px;
       color: #8c6d1f;
@@ -682,6 +714,31 @@
   const checkAbortControllers = new WeakMap();
   const checkedRows = new WeakSet();
 
+  // 后端所有 /api/* 路由都套了 common_route_wrap，返回体形如：
+  //   { status_code: 60200, result: {...}, message: 'success', detail: null, time_cost: <s> }
+  //   或异常时 { status_code: <非 60200>, result: null, message: '...错误说明...', detail, traceback, time_cost }
+  // 因此前端统一用这个 helper 走："业务码 60200 → 拿 result；否则 throw message"。
+  // 即便后端意外返回了非 JSON（极少数被反代/网关拦截的场景），也兜底成可读错误。
+  async function callApi(url, body, { signal } = {}) {
+    const resp = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body || {}),
+      signal,
+    });
+    const raw = await resp.text();
+    let data = null;
+    try { data = raw ? JSON.parse(raw) : null; } catch (_) { /* 保留 raw，由下方报错 */ }
+    if (!data || typeof data !== 'object' || typeof data.status_code === 'undefined') {
+      throw new Error(`HTTP ${resp.status}：${raw || resp.statusText || '无响应内容'}`);
+    }
+    if (data.status_code !== 60200) {
+      // 业务错误：直接抛 message，前端 alert 显示就够了。
+      throw new Error(data.message || `HTTP ${resp.status}：未知错误`);
+    }
+    return data.result;
+  }
+
   function findRowByMarkKey(markKey) {
     if (!markKey) return null;
     const item = flatList.find(x => x.markKey === markKey);
@@ -832,22 +889,12 @@
     }
 
     try {
-      const resp = await fetch('/api/post-review-check', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-        signal: ctrl.signal,
-      });
-      const data = await resp.json();
-      if (!resp.ok || !data?.ok) {
-        const detail = typeof data?.detail === 'string' ? data.detail : JSON.stringify(data?.detail || data);
-        throw new Error(detail || '检查失败');
-      }
+      const result = await callApi('/api/post-review-check', body, { signal: ctrl.signal });
       checkedRows.add(rowEl);
       renderAutoCheck(rowEl, {
         status: 'ok',
-        approval: !!data.approval,
-        review_msg: data.review_msg || {},
+        approval: !!result?.approval,
+        review_msg: result?.review_msg || {},
       });
     } catch (err) {
       if (err && err.name === 'AbortError') return;
@@ -1334,20 +1381,11 @@
         limit,
         exclude_task_ids: excludeTaskIds,
       };
-      const resp = await fetch('/api/next-rows', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      });
-      const data = await resp.json();
-      if (!resp.ok || !data?.ok) {
-        const detail = typeof data?.detail === 'string' ? data.detail : JSON.stringify(data?.detail || data);
-        throw new Error(detail || '加载失败');
-      }
+      const result = await callApi('/api/next-rows', body);
       if (signature !== lastFilterSignature) return;
-      lastTotalMatched = Number(data.total_matched || 0);
-      reachedEnd = !!data.reached_end;
-      const items = Array.isArray(data.rows) ? data.rows : [];
+      lastTotalMatched = Number(result?.total_matched || 0);
+      reachedEnd = !!result?.reached_end;
+      const items = Array.isArray(result?.rows) ? result.rows : [];
       for (const item of items) {
         if (!item || !item.html) continue;
         const tpl = document.createElement('template');
@@ -1415,24 +1453,7 @@
   }
 
   async function postSubmitRow(body) {
-    let resp = await fetch('/api/submit-row', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    });
-    if (resp.status === 404) {
-      resp = await fetch('/api/submit_row', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      });
-    }
-    const data = await resp.json();
-    if (!resp.ok || !data?.ok) {
-      const detail = typeof data?.detail === 'string' ? data.detail : JSON.stringify(data?.detail || data);
-      throw new Error(detail || '提交失败');
-    }
-    return data;
+    return await callApi('/api/submit-row', body);
   }
 
   async function handleSaveMedia(btn) {
@@ -1492,9 +1513,121 @@
     }
   }
 
+  function escapeAttr(s) {
+    return String(s ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
+  }
+
+  function enterBanniuEdit(aside) {
+    if (!aside || aside.classList.contains('editing')) return;
+    aside.classList.add('editing');
+    aside.querySelectorAll('.banniu-kv[data-editable="1"]').forEach((kv) => {
+      const vEl = kv.querySelector('.v');
+      if (!vEl) return;
+      const original = kv.dataset.originalValue || '';
+      kv.dataset.displayHtml = vEl.innerHTML;
+      vEl.innerHTML = `<input type="text" class="banniu-input" value="${escapeAttr(original)}" />`;
+    });
+    const editBtn = aside.querySelector('.banniu-edit-btn');
+    if (editBtn) editBtn.textContent = '保存';
+    const cancelBtn = aside.querySelector('.banniu-cancel-btn');
+    if (cancelBtn) cancelBtn.hidden = false;
+  }
+
+  function exitBanniuEdit(aside, { keepValues } = { keepValues: false }) {
+    if (!aside) return;
+    aside.classList.remove('editing');
+    aside.querySelectorAll('.banniu-kv[data-editable="1"]').forEach((kv) => {
+      const vEl = kv.querySelector('.v');
+      if (!vEl) return;
+      const input = vEl.querySelector('input.banniu-input');
+      if (keepValues && input) {
+        const newVal = input.value;
+        kv.dataset.originalValue = newVal;
+        vEl.textContent = newVal === '' ? '-' : newVal;
+      } else if (kv.dataset.displayHtml !== undefined) {
+        vEl.innerHTML = kv.dataset.displayHtml;
+      }
+      delete kv.dataset.displayHtml;
+    });
+    const editBtn = aside.querySelector('.banniu-edit-btn');
+    if (editBtn) {
+      editBtn.textContent = '编辑';
+      editBtn.disabled = false;
+    }
+    const cancelBtn = aside.querySelector('.banniu-cancel-btn');
+    if (cancelBtn) cancelBtn.hidden = true;
+  }
+
+  // 只收集「输入值 vs 进入编辑态时的 data-original-value 不一致」的字段。
+  // 用户没动过的 input 一律跳过，避免给班牛回写无意义的字段；
+  // 这也直接决定了 POST /api/update-banniu 的 body —— 实际下发的就是 diff。
+  function collectChangedBanniuFields(aside) {
+    const changed = {};
+    if (!aside) return changed;
+    aside.querySelectorAll('.banniu-kv[data-editable="1"]').forEach((kv) => {
+      const key = kv.dataset.banniuKey || '';
+      const input = kv.querySelector('input.banniu-input');
+      if (!key || !input) return;
+      const newVal = input.value;
+      const originalVal = kv.dataset.originalValue || '';
+      if (newVal === originalVal) return;
+      changed[key] = newVal;
+    });
+    return changed;
+  }
+
+  async function submitBanniuEdit(aside) {
+    if (!aside) return;
+    const sourceFile = aside.dataset.sourceFile || '';
+    const editBtn = aside.querySelector('.banniu-edit-btn');
+    if (!sourceFile || !editBtn) return;
+
+    const changedFields = collectChangedBanniuFields(aside);
+    if (!Object.keys(changedFields).length) {
+      // 没有任何字段被改过：直接退出编辑态，不发请求、不打扰班牛侧。
+      exitBanniuEdit(aside, { keepValues: false });
+      return;
+    }
+    editBtn.disabled = true;
+    editBtn.textContent = '保存中…';
+    try {
+      await callApi('/api/update-banniu', { source_file: sourceFile, fields: changedFields });
+      exitBanniuEdit(aside, { keepValues: true });
+    } catch (err) {
+      editBtn.disabled = false;
+      editBtn.textContent = '保存';
+      window.alert(`更新失败：${err?.message || err}`);
+    }
+  }
+
   rowsContainer?.addEventListener('click', (e) => {
     const target = e.target;
     if (!(target instanceof Element)) return;
+
+    const banniuEditBtn = target.closest('.banniu-edit-btn');
+    if (banniuEditBtn && rowsContainer.contains(banniuEditBtn)) {
+      e.preventDefault();
+      e.stopPropagation();
+      const aside = banniuEditBtn.closest('.post-banniu');
+      if (!aside) return;
+      if (aside.classList.contains('editing')) submitBanniuEdit(aside);
+      else enterBanniuEdit(aside);
+      return;
+    }
+
+    const banniuCancelBtn = target.closest('.banniu-cancel-btn');
+    if (banniuCancelBtn && rowsContainer.contains(banniuCancelBtn)) {
+      e.preventDefault();
+      e.stopPropagation();
+      const aside = banniuCancelBtn.closest('.post-banniu');
+      if (aside) exitBanniuEdit(aside, { keepValues: false });
+      return;
+    }
 
     const markBtn = target.closest('.mark-btn');
     if (markBtn && rowsContainer.contains(markBtn)) {

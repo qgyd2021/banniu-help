@@ -12,7 +12,7 @@ from urllib.parse import urlencode
 import cacheout
 import requests
 
-from toolbox.utils.utils import when_error
+from toolbox.utils.utils import when_error, when_expected_error, ExpectedError
 
 logger = logging.getLogger("toolbox")
 
@@ -211,13 +211,15 @@ class ShareMediaDownloadRestful(object):
             headers=headers, params=params, timeout=30,
         )
         if response.status_code != 200:
-            raise AssertionError(
-                f"web-dynamic detail failed; status_code: {response.status_code}, dynamic_id: {dynamic_id}"
+            raise ExpectedError(
+                status_code=60500,
+                message=f"web-dynamic detail failed; status_code: {response.status_code}, dynamic_id: {dynamic_id}"
             )
         js = response.json()
         if js.get("code") != 0:
-            raise AssertionError(
-                f"web-dynamic detail api error; code: {js.get('code')}, message: {js.get('message')}, dynamic_id: {dynamic_id}"
+            raise ExpectedError(
+                status_code=60500,
+                message=f"web-dynamic detail api error; code: {js.get('code')}, message: {js.get('message')}, dynamic_id: {dynamic_id}"
             )
         return js
 
@@ -281,16 +283,19 @@ class ShareMediaDownload(ShareMediaDownloadRestful):
 
     def get_post_meta_by_share_text(self, share_text: str) -> dict:
         share_url = self.get_share_url_by_share_text(share_text)
+        result = self.get_post_meta_by_share_url(share_url)
+        return result
+
+    @when_expected_error(return_value=None)
+    def get_post_meta_by_share_url(self, share_url: str) -> dict:
         final_url = self.get_final_url_by_share_url(share_url)
 
         post_meta: Optional[PostMeta] = None
 
-        # 分支 3：t.bilibili.com / m.bilibili.com/opus 走带 WBI 签名的 web-dynamic 接口。
         dynamic_id = self.parse_dynamic_id_by_url(final_url)
         if dynamic_id is not None:
             web_dynamic = self.get_web_dynamic_by_dynamic_id(dynamic_id)
             post_meta = self.build_post_meta_from_web_dynamic_opus_branch_1(web_dynamic, dynamic_id)
-
         if post_meta is None:
             init_state = self.get_init_state_by_final_url(final_url)
             post_meta = self.build_post_meta_from_init_state_branch_2(init_state)
@@ -299,7 +304,7 @@ class ShareMediaDownload(ShareMediaDownloadRestful):
             post_meta = self.build_post_meta_from_init_state_branch_3(init_state)
 
         if post_meta is None:
-            raise AssertionError(f"未成功解析到信息；share_url: {share_url}")
+            raise ExpectedError(status_code=60500, message="未成功解析到信息；share_url: {share_url}")
 
         post_meta.share_url = share_url
         post_meta.final_url = final_url

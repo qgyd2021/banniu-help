@@ -3,7 +3,8 @@
     "enable": true,
     "type": "banniu_task_download",
     "project_id": "39369",
-    "check_interval": 21600,
+    "check_interval": 600,
+    "fetch_delay_seconds": 21600,
     "output_dir": "temp/banniu_39369/step_1_banniu_task_download/tasks",
     "last_fetch_tasks": "temp/banniu_39369/step_1_banniu_task_download/last_fetch_tasks.json",
     "last_fetch_time_txt": "temp/banniu_39369/step_1_banniu_task_download/last_fetch_time.txt"
@@ -171,6 +172,8 @@
   {
     "enable": true,
     "type": "post_review_submit_service",
+    "project_id": "39369",
+    "app_id": "41339",
     "check_interval": 60,
     "source_dirs": [
       "temp/banniu_39369/step_5_3_post_review_text_tags_review",

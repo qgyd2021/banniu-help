@@ -4,7 +4,7 @@ from typing import Dict
 
 import requests
 from toolbox.xiaohongshu.xiaohongshu_client import XiaoHongShuClient
-from toolbox.xiaohongshu.media.share_media_download import ShareMediaDownload
+from toolbox.xiaohongshu.media.share_media_download_ import ShareMediaDownload
 
 
 class FreshImageUrl(XiaoHongShuClient):

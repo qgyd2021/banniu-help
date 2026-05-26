@@ -5,10 +5,10 @@ import json
 import logging
 import re
 import shutil
-import sys
+import traceback
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional
 
 import cacheout
 import uvicorn
@@ -18,10 +18,18 @@ from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 from starlette.requests import Request
 
+from toolbox.banniu.sdk.banniu_client import AsyncBanNiuClient
 from toolbox.porter.tasks.base_task import BaseTask, TaskJsonUtils
+from toolbox.porter.tasks.post_review_submit_service_task.exception import ExpectedError
+from toolbox.porter.tasks.post_review_submit_service_task.route_wrap.common_route_wrap import (
+    common_route_wrap,
+    async_common_route_wrap,
+)
+from toolbox.porter.tasks.utils.post_review import PostReviewChecker
 from toolbox.porter.entity.banniu_task import BanniuTaskFormatted
 from toolbox.porter.entity.post_meta import PostMeta
 from toolbox.porter.entity.post_review import PostReview
+
 from toolbox.bilibili.utils.fresh_media_url import FreshImageUrl as BilibiliFreshImageUrl
 from toolbox.weibo.utils.fresh_media_url import FreshImageUrl as WeiboFreshImageUrl
 from toolbox.xiaohongshu.utils.fresh_media_url import FreshImageUrl as XiaoHongShuFreshImageUrl
@@ -38,49 +46,19 @@ from toolbox.kuaishou.utils.fresh_media_url import FreshVideoUrl as KuaishouFres
 from toolbox.dewu.utils.fresh_media_url import FreshVideoUrl as DewuFreshVideoUrl
 from toolbox.xiaoheihe.utils.fresh_media_url import FreshVideoUrl as XiaoHeiHeFreshVideoUrl
 
-from toolbox.porter.tasks.utils.post_review import PostReviewChecker
-from project_settings import project_path
+from project_settings import environment, project_path
 
 logger = logging.getLogger("toolbox")
 
-
-# 短期 TTL 缓存：避免同一份 task json 在一次/相邻请求中被多次 IO 读出。
-# - 同一条 task 走 _iter_task_indices + collect_post_rows + api_next_rows 时只读一次盘。
-# - TTL 较短，保证多审核员协作场景下与磁盘状态基本一致；
-#   文件被 ``api_submit_row`` move 到 target_dir 后即不会再被访问，旧缓存自然失效。
-_TASK_JSON_CACHE: cacheout.Cache = cacheout.Cache(maxsize=10000, ttl=60)
+TASK_JSON_CACHE: cacheout.Cache = cacheout.Cache(maxsize=1000000, ttl=24*3600)
 
 
-@_TASK_JSON_CACHE.memoize(ttl=60)
-def _read_task_json(source_file: str) -> Optional[Dict[str, Any]]:
-    """读取 task json 文件并解析为 dict；失败或非 dict 返回 None。"""
-    try:
-        with open(source_file, "r", encoding="utf-8") as f:
-            payload = json.load(f)
-    except Exception:
-        return None
-    return payload if isinstance(payload, dict) else None
-
-
-class SubmitRowRequest(BaseModel):
+class UpdateBanniuRequest(BaseModel):
     source_file: str
-    media_marks: Optional[Dict[str, str]] = None
-    approved: Optional[bool] = None
-    reason: Optional[str] = ""
+    fields: Dict[str, Any]
 
 
 class NextRowsRequest(BaseModel):
-    """前端按筛选条件分批拉取 row 的请求体。
-
-    后端按 ``task_id`` 记录"首次分发给哪个 client_id"，规则：
-    - 已被别的 ``client_id`` 锁定的 task，本次请求跳过（多人之间不撞车）；
-    - 已锁定给当前 ``client_id`` 的 task，仍可以再次分发给它本人
-      （刷新页面拿到原来的 client_id 时，刚才看到的帖子还在）；
-    - 没人拿过的 task，分发并把"归属"记为当前 ``client_id``；
-    - 每条记录 10 分钟 TTL，每次再次分发给同一 client 会续期；
-      若被分发后该 client 长时间不再访问，自动释放给其他人。
-    """
-
     client_id: Optional[str] = ""
     keyword: Optional[str] = ""
     product_model: Optional[str] = ""
@@ -93,10 +71,22 @@ class NextRowsRequest(BaseModel):
     limit: Optional[int] = 2
 
 
+class SubmitRowRequest(BaseModel):
+    source_file: str
+    media_marks: Optional[Dict[str, str]] = None
+    approved: Optional[bool] = None
+    reason: Optional[str] = ""
+
+
 @BaseTask.register("post_review_submit_service", exist_ok=True)
 class PostReviewSubmitServiceTask(BaseTask, TaskJsonUtils):
     def __init__(
         self,
+        project_id: str,
+        app_id: str,
+        key_of_app_key: str = "BANNIU_APP_KEY",
+        key_of_app_secret: str = "BANNIU_APP_SECRET",
+        key_of_access_token: str = "BANNIU_ACCESS_TOKEN",
         check_interval: int = 60,
         source_dirs: List[str] = None,
         target_dir: str = "temp/banniu_37728/step_11_post_review_submit",
@@ -110,6 +100,17 @@ class PostReviewSubmitServiceTask(BaseTask, TaskJsonUtils):
         post_review_checker_kwargs: Dict[str, Any] = None,
     ):
         super().__init__(flag=f"[{self.__class__.__name__}]", check_interval=check_interval)
+        self.project_id = str(project_id)
+        self.app_id = str(app_id)
+        app_key = environment.get(key_of_app_key)
+        app_secret = environment.get(key_of_app_secret)
+        access_token = environment.get(key_of_access_token)
+        self.banniu_client = AsyncBanNiuClient(
+            app_key=app_key,
+            app_secret=app_secret,
+            access_token=access_token,
+        )
+
         source_dirs = source_dirs or []
         self.source_dirs = [self.resolve_project_path(source_dir) for source_dir in source_dirs]
         self.target_dir = self.resolve_project_path(target_dir)
@@ -178,12 +179,15 @@ class PostReviewSubmitServiceTask(BaseTask, TaskJsonUtils):
         server_file.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
         return server_file
 
-    # ------------------------------------------------------------------
-    # 数据收集：
-    #   - 读盘只走 ``_read_task_json`` 一个入口（带 60 秒 TTL 缓存），避免二次 IO。
-    #   - ``_row_from_payload`` 仅做 dict → row dict 的字段转换，不做 IO。
-    #   - ``_iter_task_indices`` 用于初次页面的下拉项；``api_next_rows`` 走流式扫描。
-    # ------------------------------------------------------------------
+    @staticmethod
+    @TASK_JSON_CACHE.memoize(ttl=24 * 3600)
+    def read_task_json(source_file: str) -> Optional[Dict[str, Any]]:
+        try:
+            with open(source_file, "r", encoding="utf-8") as f:
+                payload = json.load(f)
+        except Exception:
+            return None
+        return payload if isinstance(payload, dict) else None
 
     @staticmethod
     def _parse_image_urls(raw: Any) -> List[str]:
@@ -236,6 +240,19 @@ class PostReviewSubmitServiceTask(BaseTask, TaskJsonUtils):
             return "false"
         return "none"
 
+    @classmethod
+    @cacheout.memoize(ttl=24*3600)
+    def get_editable_banniu_keys(cls) -> List[str]:
+        out: List[str] = []
+        for _, field in BanniuTaskFormatted.model_fields.items():
+            alias = field.alias
+            if not alias:
+                continue
+            if alias.startswith("taskId"):
+                continue
+            out.append(alias)
+        return out
+
     @staticmethod
     def _extract_platform(payload: Dict[str, Any]) -> Optional[str]:
         """从 payload 提取 platform：仅从 post_meta.platform 取。
@@ -284,7 +301,7 @@ class PostReviewSubmitServiceTask(BaseTask, TaskJsonUtils):
             if not source_dir.exists():
                 continue
             for fp in sorted(source_dir.rglob("**/*.json")):
-                payload = _read_task_json(fp.as_posix())
+                payload = self.read_task_json(fp.as_posix())
                 if not payload:
                     continue
                 platform = self._extract_platform(payload) or ""
@@ -371,6 +388,7 @@ class PostReviewSubmitServiceTask(BaseTask, TaskJsonUtils):
         return {
             "source_file": fp.as_posix(),
             "final_approved_key": final_key,
+            "editable_banniu_keys": self.get_editable_banniu_keys(),
             "banniu_data": {
                 "task_id": task_formatted.task_id_str,
                 "工单编号": task_formatted.order_work_no,
@@ -500,7 +518,7 @@ class PostReviewSubmitServiceTask(BaseTask, TaskJsonUtils):
         """旧接口：构造全部完整 rows（保留作兼容外部调用入口，gallery 已不调用）。"""
         rows: List[Dict[str, Any]] = []
         for e in self._iter_task_indices():
-            payload = _read_task_json(e["source_file"])
+            payload = self.read_task_json(e["source_file"])
             if not payload:
                 continue
             row = self._row_from_payload(payload, Path(e["source_file"]))
@@ -665,22 +683,19 @@ class PostReviewSubmitServiceTask(BaseTask, TaskJsonUtils):
 
         return post_review
 
+    @common_route_wrap
     def api_post_review_check(self, payload: SubmitRowRequest) -> Dict[str, Any]:
-        """根据当前界面上的 marks/approved/reason，调用 PostReviewChecker 给出实时审核结果。
-
-        与 ``api_submit_row`` 不同：本接口不写文件、不归档，仅返回是否会通过审核以及失败原因。
-        """
         src = self.resolve_source_file(payload.source_file)
         if not src.exists() or not src.is_file():
-            raise HTTPException(status_code=404, detail=f"source file not found: {src.as_posix()}")
+            raise ExpectedError(status_code=60404, message=f"找不到源文件：{src.as_posix()}")
 
         try:
             with open(src.as_posix(), "r", encoding="utf-8") as f:
                 js = json.load(f)
         except Exception as exc:
-            raise HTTPException(status_code=400, detail=f"source file is not valid json: {exc}") from exc
+            raise ExpectedError(status_code=60400, message=f"源文件不是合法 JSON：{exc}") from exc
         if not isinstance(js, dict):
-            raise HTTPException(status_code=400, detail="source file is not valid json object")
+            raise ExpectedError(status_code=60400, message="源文件不是合法的 JSON 对象")
 
         post_review = self.build_post_review_with_marks(
             js=js,
@@ -692,12 +707,13 @@ class PostReviewSubmitServiceTask(BaseTask, TaskJsonUtils):
         product_model = (task_formatted.product_model or "").strip()
 
         result = self.post_review_checker.predict(post_review, product_model=product_model)
-        return {
-            "ok": True,
+        result = {
             "approval": bool(result.get("approval", False)),
             "review_msg": result.get("review_msg", {}) or {},
         }
+        return result
 
+    @common_route_wrap
     def api_submit_row(self, payload: SubmitRowRequest) -> Dict[str, Any]:
         step_target_root = self.target_dir.resolve()
         src = self.resolve_source_file(payload.source_file)
@@ -705,29 +721,18 @@ class PostReviewSubmitServiceTask(BaseTask, TaskJsonUtils):
         # 用「是否为 None」区分：未传 media_marks 键则为 None。
         do_media = payload.media_marks is not None
         if not do_media:
-            raise HTTPException(status_code=400, detail="请提交 media_marks（保存图片/视频标注）")
+            raise ExpectedError(status_code=60400, message="请提交 media_marks（保存图片/视频标注）")
 
         if not src.exists() or not src.is_file():
-            raise HTTPException(status_code=404, detail=f"source file not found: {src.as_posix()}")
-
-        # 仅在「源文件已不存在」时视为已归档；避免目标目录残留同名文件导致无法保存标注。
-        # if not src.exists() or not src.is_file():
-        #     if target.exists() and target.is_file():
-        #         return {
-        #             "ok": True,
-        #             "already_submitted": True,
-        #             "source_file": src.as_posix(),
-        #             "target_file": target.as_posix(),
-        #         }
-        #     raise HTTPException(status_code=404, detail=f"source file not found: {src.as_posix()}")
+            raise ExpectedError(status_code=60404, message=f"找不到源文件：{src.as_posix()}")
 
         try:
             with open(src.as_posix(), "r", encoding="utf-8") as f:
                 js = json.load(f)
         except Exception as exc:
-            raise HTTPException(status_code=400, detail=f"source file is not valid json: {exc}") from exc
+            raise ExpectedError(status_code=60400, message=f"源文件不是合法 JSON：{exc}") from exc
         if not isinstance(js, dict):
-            raise HTTPException(status_code=400, detail="source file is not valid json object")
+            raise ExpectedError(status_code=60400, message="源文件不是合法的 JSON 对象")
 
         platform = js.get("post_meta", dict()).get("platform", "unknown")
         target = step_target_root / platform / src.name
@@ -744,14 +749,75 @@ class PostReviewSubmitServiceTask(BaseTask, TaskJsonUtils):
 
         target.parent.mkdir(parents=True, exist_ok=True)
         shutil.move(src.as_posix(), target.as_posix())
-        return {
-            "ok": True,
+        result = {
             "moved": True,
             "saved_media": True,
             "saved_review_final": payload.approved is not None,
             "source_file": src.as_posix(),
             "target_file": target.as_posix(),
         }
+        return result
+
+    @async_common_route_wrap
+    async def api_update_banniu(self, payload: UpdateBanniuRequest) -> Dict[str, Any]:
+        src = self.resolve_source_file(payload.source_file)
+        if not src.exists() or not src.is_file():
+            raise ExpectedError(status_code=60404, message=f"找不到源文件：{src.as_posix()}")
+
+        with open(src.as_posix(), "r", encoding="utf-8") as f:
+            js = json.load(f)
+        if not isinstance(js, dict):
+            raise ExpectedError(status_code=60400, message="源文件不是合法的 JSON 对象")
+
+        task_formatted = BanniuTaskFormatted.from_dict(js["task_formatted"])
+        task_id = task_formatted.task_id_str
+        if not task_id:
+            raise ExpectedError(status_code=60400, message="task_formatted 里缺少 task_id，无法回写班牛")
+
+        editable_banniu_keys = set(self.get_editable_banniu_keys())
+        fields: Dict[str, Any] = {}
+        for k, v in (payload.fields or {}).items():
+            if isinstance(k, str) and k in editable_banniu_keys:
+                fields[k] = v
+        if not fields:
+            raise ExpectedError(status_code=60400, message="没有需要修改的字段")
+
+        try:
+            banniu_resp = await self.banniu_client.task_update_pretty(
+                project_id=self.project_id,
+                app_id=self.app_id,
+                task_id=task_id,
+                named_fields=fields,
+            )
+        except Exception as exc:
+            logger.exception(f"{self.flag} task_update_pretty failed; task_id={task_id} fields={fields}")
+            raise ExpectedError(
+                status_code=60502,
+                message=f"班牛回写失败：{type(exc).__name__}: {exc}",
+                traceback=traceback.format_exc(),
+            ) from exc
+
+        code = banniu_resp["response"]["code"]
+        error_msg = banniu_resp["response"]["error_msg"]
+        if code != 0:
+            raise ExpectedError(
+                status_code=60000 + int(code),
+                message=f"班牛回写失败：{error_msg}。可能的原因：（1）字段是枚举类型，而提交的值却不在可选项中。",
+                detail=str(banniu_resp),
+            )
+
+        task_formatted_dict = js["task_formatted"]
+        task_formatted_dict.update(fields)
+        js["task_formatted"] = task_formatted_dict
+        src.write_text(json.dumps(js, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        TASK_JSON_CACHE.delete(src.as_posix())
+
+        result = {
+            "task_id": task_id,
+            "updated_fields": fields,
+            "banniu_response": banniu_resp,
+        }
+        return result
 
     def gallery_page(self, request: Request) -> HTMLResponse:
         """渲染外壳页：仅传入筛选下拉项与是否有数据；rows 不在初次渲染时下发。"""
@@ -769,24 +835,11 @@ class PostReviewSubmitServiceTask(BaseTask, TaskJsonUtils):
             },
         )
 
+    @common_route_wrap
     def api_next_rows(self, payload: NextRowsRequest) -> Dict[str, Any]:
-        """流式扫描 source_dirs，找到 ``limit`` 条满足筛选且可分发的 task 后立即返回。
-
-        - 不维护全量索引/缓存，每次都直接读盘。这保证与磁盘最新状态完全一致，
-          也让多审核员场景下"刚归档的 task"不会再被误下发。
-        - ``self.source_dirs`` 倒序遍历：流水线后期 step 的副本（信息最全）优先；
-          同一 task_id 在更早 step 中再出现时会被本次的 ``seen_tids`` 跳过。
-        - ``dispense_cache`` 记录 ``task_id -> 首次拿到它的 client_id``：
-            * 已属于"别的 client_id"的 task → 跳过，防止多人撞车；
-            * 已属于"当前 client_id"或还没人拿过的 task → 可以分发，同时
-              ``set`` 一下续期 / 落归属；
-            * 因此前端刷新（只要 client_id 持久化没变）能再次看到刚才的帖子。
-        - ``exclude_task_ids`` 是前端当前**屏幕上**还在的 task_id 列表：
-          这些已经显示给用户了，不需要本次再下发一份（即便它属于当前 client）。
-        """
         client_id = (payload.client_id or "").strip()
         if not client_id:
-            raise HTTPException(status_code=400, detail="missing client_id")
+            raise ExpectedError(status_code=60400, message="缺少 client_id")
 
         exclude = set(payload.exclude_task_ids or [])
         limit = max(1, min(int(payload.limit or 2), 20))
@@ -801,17 +854,17 @@ class PostReviewSubmitServiceTask(BaseTask, TaskJsonUtils):
             if not source_dir.exists():
                 continue
             for fp in sorted(source_dir.rglob("**/*.json")):
-                payload_dict = _read_task_json(fp.as_posix())
-                if not payload_dict:
+                task_data = self.read_task_json(fp.as_posix())
+                if not task_data:
                     continue
-                task_formatted = BanniuTaskFormatted.from_dict(payload_dict.get("task_formatted"))
+                task_formatted = BanniuTaskFormatted.from_dict(task_data.get("task_formatted"))
                 tid = task_formatted.task_id_str or ""
                 if not tid or tid in seen_tids:
                     continue
                 seen_tids.add(tid)
 
-                platform = self._extract_platform(payload_dict) or ""
-                if not self._match_filter(payload_dict, task_formatted, platform, payload):
+                platform = self._extract_platform(task_data) or ""
+                if not self._match_filter(task_data, task_formatted, platform, payload):
                     continue
                 matched_scanned += 1
 
@@ -822,7 +875,7 @@ class PostReviewSubmitServiceTask(BaseTask, TaskJsonUtils):
                 if owner and owner != client_id:
                     continue  # 已被其他 client 锁定
 
-                row = self._row_from_payload(payload_dict, fp)
+                row = self._row_from_payload(task_data, fp)
                 if not row:
                     continue
                 rows_out.append({
@@ -840,14 +893,14 @@ class PostReviewSubmitServiceTask(BaseTask, TaskJsonUtils):
                 break
 
         reached_end = not stopped_early
-        return {
-            "ok": True,
+        result = {
             "rows": rows_out,
             "reached_end": reached_end,
             "matched_scanned": matched_scanned,
             "total_matched": matched_scanned,
             "served": len(rows_out),
         }
+        return result
 
     def add_router(self) -> FastAPI:
         self.app.add_api_route("/", self.gallery_page, methods=["GET"], response_class=HTMLResponse)
@@ -856,6 +909,7 @@ class PostReviewSubmitServiceTask(BaseTask, TaskJsonUtils):
         self.app.add_api_route("/api/submit-row", self.api_submit_row, methods=["POST"])
         self.app.add_api_route("/api/post-review-check", self.api_post_review_check, methods=["POST"])
         self.app.add_api_route("/api/next-rows", self.api_next_rows, methods=["POST"])
+        self.app.add_api_route("/api/update-banniu", self.api_update_banniu, methods=["POST"])
         return self.app
 
     async def do_task(self):
@@ -879,11 +933,18 @@ class PostReviewSubmitServiceTask(BaseTask, TaskJsonUtils):
 
 async def main():
     import log
-    from project_settings import log_directory, time_zone_info
+    from project_settings import environment, log_directory, time_zone_info
 
     log.setup_size_rotating(log_directory=log_directory, tz_info=time_zone_info)
 
     task = PostReviewSubmitServiceTask(
+        banniu_client_kwargs={
+            "app_key": environment.get("BANNIU_APP_KEY"),
+            "app_secret": environment.get("BANNIU_APP_SECRET"),
+            "access_token": environment.get("BANNIU_ACCESS_TOKEN"),
+        },
+        banniu_project_id="39369",
+        banniu_app_id="21000018",
         check_interval=60,
         source_dirs=[
             "temp/banniu_39369/step_1_banniu_task_download",

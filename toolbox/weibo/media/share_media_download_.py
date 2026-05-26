@@ -25,7 +25,7 @@ import cacheout
 import requests
 import requests.utils
 
-from toolbox.utils.utils import when_error
+from toolbox.utils.utils import when_error, when_expected_error, ExpectedError
 
 CountValue = Union[int, float, str]
 
@@ -143,7 +143,7 @@ class ShareMediaDownloadRestful(object):
         response = self._session.get(share_url, headers=self.headers, allow_redirects=True, timeout=30)
         return response.url
 
-    @cacheout.memoize(ttl=10)
+    @cacheout.memoize(ttl=60)
     def get_statuses(self, status_id: str) -> Dict[str, Any]:
         """``m.weibo.cn/statuses/show?id={id}`` 免 visitor cookie，可直接拿到完整字段。"""
         url = "https://m.weibo.cn/statuses/show"
@@ -166,7 +166,10 @@ class ShareMediaDownloadRestful(object):
             )
         js = response.json()
         if not isinstance(js, dict) or js.get("ok") != 1:
-            raise AssertionError(f"statuses/show invalid; body: {response.text[:300]}")
+            # {'ok': 0, 'errno': '20101', 'msg': '该微博不存在', 'error_type': 'alert', 'extra': 'target weibo does not exist!'}
+            # {'ok': 0, 'errno': '20174', 'msg': '请前往微博客户端登录查看完整内容', 'title': '微博', 'btn': {'color': 'red', 'text': '微博内打开', 'url': '/feature/download/index'}, 'error_type': 'confirm', 'extra': 'Sorry, current status can only be seen by login user in official client/website! '}
+            # {'ok': 0, 'errno': '20112', 'msg': '暂无查看权限', 'error_type': 'alert', 'extra': 'Permission Denied!'}
+            raise ExpectedError(status_code=f'{js["errno"]}', message=f'statuses/show invalid; body: {js["msg"]}')
         data = js.get("data") or {}
         if not data:
             raise AssertionError(f"statuses/show empty data; status_id: {status_id}")
@@ -291,9 +294,26 @@ class ShareMediaDownload(ShareMediaDownloadRestful):
             return None
         return status_id
 
+    @staticmethod
+    def when_expected_error_return_post_meta(fn, *args, **kwargs):
+        try:
+            return fn(*args, **kwargs)
+        except ExpectedError as error:
+            if error.status_code in (20101, 20112, 20174):
+                post_meta = PostMeta()
+                post_meta.title = error.message
+                post_meta.desc = error.message
+                return post_meta
+            else:
+                raise error
+
     def get_post_meta_by_share_text(self, share_text: str) -> dict:
         share_url = self.get_share_url_by_share_text(share_text)
-        # print(f"share_url: {share_url}")
+        result = self.get_post_meta_by_share_url(share_url)
+        return result
+
+    @when_expected_error(return_value=None)
+    def get_post_meta_by_share_url(self, share_url: str) -> dict:
         final_url = self.get_final_url_by_share_url(share_url)
         # print(f"final_url: {final_url}")
 
@@ -302,12 +322,12 @@ class ShareMediaDownload(ShareMediaDownloadRestful):
         status_id: str = self.get_status_id_by_share_url(share_url, final_url)
 
         if post_meta is None and status_id is not None:
-            statuses = self.get_statuses(status_id)
+            statuses = self.when_expected_error_return_post_meta(self.get_statuses, status_id)
             # print(f"statuses: {json.dumps(statuses, ensure_ascii=False, indent=4)}")
             post_meta = self.build_post_meta_from_statuses_branch_2(statuses)
 
         if post_meta is None and status_id is not None:
-            statuses = self.get_statuses(status_id)
+            statuses = self.when_expected_error_return_post_meta(self.get_statuses, status_id)
             # print(f"statuses: {json.dumps(statuses, ensure_ascii=False, indent=4)}")
             post_meta = self.build_post_meta_from_statuses_branch_3(statuses)
 
@@ -323,7 +343,7 @@ class ShareMediaDownload(ShareMediaDownloadRestful):
                 post_meta = self.build_post_meta_from_h5_video_branch_4(h5_video_data)
 
         if post_meta is None:
-            raise AssertionError(f"未成功解析到信息；share_url: {share_url};")
+            raise ExpectedError(status_code=60500, message="未成功解析到信息；share_url: {share_url};")
 
         post_meta.share_url = share_url
         post_meta.final_url = final_url

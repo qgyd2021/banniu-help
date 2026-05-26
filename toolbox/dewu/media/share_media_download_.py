@@ -7,7 +7,7 @@ from typing import Any, Dict, List, Union
 
 import requests
 
-from toolbox.utils.utils import when_error
+from toolbox.utils.utils import when_error, when_expected_error, ExpectedError
 
 CountValue = Union[int, float, str]
 
@@ -108,14 +108,18 @@ class ShareMediaDownload(ShareMediaDownloadRestful):
 
     def get_post_meta_by_share_text(self, share_text: str) -> dict:
         share_url = self.get_share_url_by_share_text(share_text)
-        # print(f"share_url: {share_url}")
+        result = self.get_post_meta_by_share_url(share_url)
+        return result
+
+    @when_expected_error(return_value=None)
+    def get_post_meta_by_share_url(self, share_url: str) -> dict:
         final_url = self.get_final_url_by_share_url(share_url)
         # print(f"final_url: {final_url}")
         next_data = self.get_next_data_by_final_url(final_url)
         # print(json.dumps(next_data, ensure_ascii=False, indent=2))
         post_meta: PostMeta = self.build_post_meta_from_next_data_branch_1(next_data)
         if post_meta is None:
-            raise AssertionError(f"未成功解析到信息；share_url: {share_url}")
+            raise ExpectedError(status_code=60500, message="未成功解析到信息；share_url: {share_url}")
 
         post_meta.share_url = share_url
         post_meta.final_url = final_url
@@ -140,8 +144,8 @@ class ShareMediaDownload(ShareMediaDownloadRestful):
         post_meta.post_id = page_props["trendId"]
         data = page_props["metaOGInfo"]["data"]
         if len(data) == 0:
-            post_meta.title = "blank"
-            post_meta.desc = "blank"
+            post_meta.title = ""
+            post_meta.desc = ""
             return post_meta
         data = data[0]
         user_info = data["userInfo"]

@@ -4,7 +4,7 @@ from typing import Dict
 
 import requests
 from toolbox.bilibili.bilibili_client import BilibiliClient
-from toolbox.bilibili.media.share_media_download import ShareMediaDownload
+from toolbox.bilibili.media.share_media_download_ import ShareMediaDownload
 
 
 class FreshImageUrl(BilibiliClient):
@@ -65,10 +65,10 @@ class FreshVideoUrl(BilibiliClient):
             return response
 
         response.close()
-        post_meta = self.share_client.video.get_post_meta_by_share_url(share_url)
+        post_meta = self.share_client.get_post_meta_by_share_url(share_url)
 
         video_urls = post_meta["video_urls"]
-        video_url = video_urls[video_index]
+        video_url = video_urls[video_index]["video_url"]
         response = requests.request(
             "GET",
             video_url,

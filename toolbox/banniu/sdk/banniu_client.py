@@ -35,6 +35,24 @@ class BanNiuClient(BanNiuRestfulClient):
             contents=contents,
         )
 
+    def task_update_pretty(self, project_id: str, app_id: str, task_id: str, named_fields: dict):
+        form = self.build_form(project_id)
+
+        contents = {}
+        for k, v in named_fields.items():
+            cid: str = form.get_column_id_by_name(k)
+            v = form.map_option_value_to_id(cid, v)
+            contents[cid] = v
+
+        print(f"named_fields: {json.dumps(named_fields, ensure_ascii=False, indent=4)}")
+        print(f"contents: {json.dumps(contents, ensure_ascii=False, indent=4)}")
+        return self.task_update(
+            project_id=str(project_id),
+            app_id=str(app_id),
+            task_id=str(task_id),
+            contents=contents,
+        )
+
     @staticmethod
     def get_behavior_type_by_name(name: str):
         behavior_type_map = {
@@ -135,6 +153,22 @@ class AsyncBanNiuClient(AsyncBanNiuRestfulClient):
             project_id=str(project_id),
             app_id=str(app_id),
             user_id=str(user_id),
+            contents=contents,
+        )
+
+    async def task_update_pretty(self, project_id: str, app_id: str, task_id: str, named_fields: dict):
+        form = await self.build_form(project_id)
+
+        contents = {}
+        for k, v in named_fields.items():
+            cid: str = form.get_column_id_by_name(k)
+            v = form.map_option_value_to_id(cid, v)
+            contents[cid] = v
+
+        return await self.task_update(
+            project_id=str(project_id),
+            app_id=str(app_id),
+            task_id=str(task_id),
             contents=contents,
         )
 

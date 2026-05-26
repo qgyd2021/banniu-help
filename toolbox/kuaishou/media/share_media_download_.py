@@ -8,7 +8,7 @@ from urllib.parse import parse_qs, unquote, urlparse
 
 import requests
 
-from toolbox.utils.utils import when_error
+from toolbox.utils.utils import when_error, when_expected_error, ExpectedError
 
 CountValue = Union[int, float, str]
 
@@ -142,7 +142,11 @@ class ShareMediaDownload(ShareMediaDownloadRestful):
 
     def get_post_meta_by_share_text(self, share_text: str) -> dict:
         share_url = self.get_share_url_by_share_text(share_text)
-        # print(f"share_url: {share_url}")
+        result = self.get_post_meta_by_share_url(share_url)
+        return result
+
+    @when_expected_error(return_value=None)
+    def get_post_meta_by_share_url(self, share_url: str) -> dict:
         html, final_url = self.get_html_and_final_url_by_share_url(share_url)
         # print(f"final_url: {final_url}")
         # print(f"html: {html}")
@@ -161,7 +165,7 @@ class ShareMediaDownload(ShareMediaDownloadRestful):
             raise NotImplementedError
 
         if post_meta is None:
-            raise AssertionError(f"未成功解析到信息；share_url: {share_url}")
+            raise ExpectedError(status_code=60500, message="未成功解析到信息；share_url: {share_url}")
 
         post_meta.share_url = share_url
         post_meta.final_url = final_url
