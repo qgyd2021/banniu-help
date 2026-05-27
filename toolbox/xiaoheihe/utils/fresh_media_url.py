@@ -20,7 +20,7 @@ class FreshImageUrl(XiaoHeiHeClient):
     def __init__(self):
         super().__init__()
 
-    def ensure_image_url(self, image_url: str, share_url: str):
+    def ensure_image_url(self, image_url: str, image_index: int, share_url: str):
         response = requests.request(
             "GET",
             image_url,

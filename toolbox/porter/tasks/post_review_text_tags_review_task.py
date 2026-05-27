@@ -53,7 +53,7 @@ class PostReviewTextTagsReviewTask(BaseTask, TaskJsonUtils):
 
             files = self.pick_task_files(source_dir, recursive=False)
             for src in files:
-                payload = await self.load_json_file(src)
+                payload: dict = await self.load_json_file(src)
                 task_formatted = BanniuTaskFormatted.from_dict(payload["task_formatted"])
                 post_meta = PostMeta.from_dict(payload["post_meta"])
 

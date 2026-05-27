@@ -1,10 +1,13 @@
 #!/usr/bin/python3
 # -*- coding: utf-8 -*-
 import json
+import logging
 import re
 from typing import Any, Optional
 
 from openai import AsyncOpenAI, OpenAI
+
+logger = logging.getLogger("toolbox")
 
 
 class LLMAsJudge(object):
@@ -49,7 +52,15 @@ class LLMAsJudge(object):
         end = s.rfind("}")
         if start != -1 and end != -1 and end > start:
             s = s[start : end + 1]
-        return json.loads(s)
+        try:
+            result = json.loads(s)
+        except json.decoder.JSONDecodeError as error:
+            logger.error(f"json.decoder.JSONDecodeError: {text}")
+            result = {
+                "label": "中性",
+                "desc": f"{text}",
+            }
+        return result
 
     def complete_json(self, user_message: str) -> Any:
         messages = []

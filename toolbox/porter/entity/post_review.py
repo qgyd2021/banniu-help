@@ -16,7 +16,6 @@ class ReviewDuplicate(BaseModel):
 
 class ReviewText(BaseModel):
     model_config = ConfigDict(extra="allow")
-
     emotion_label: str = Field(default="", description="情绪标签")
     emotion_desc: str = Field(default="", description="情绪描述")
     title_length: int = Field(default=-1, description="标题长度")
@@ -25,9 +24,13 @@ class ReviewText(BaseModel):
     tags_miss: Optional[List[str]] = Field(default=None, description="未匹配到的标签")
 
 
+class ReviewImageItem(BaseModel):
+    model_config = ConfigDict(extra="allow")
+    images: Optional[List[dict]] = Field(default=None, description="图片URL及其目标检测")
+
+
 class ReviewImage(BaseModel):
     model_config = ConfigDict(extra="allow")
-
     total_count: int = Field(default=-1, description="总的数量")
     check_count: int = Field(default=-1, description="打勾的数量")
     cross_count: int = Field(default=-1, description="打叉的数量")
@@ -36,7 +39,6 @@ class ReviewImage(BaseModel):
 
 class ReviewVideo(BaseModel):
     model_config = ConfigDict(extra="allow")
-
     total_count: int = Field(default=-1, description="总的数量")
     check_count: int = Field(default=-1, description="打勾的数量")
     cross_count: int = Field(default=-1, description="打叉的数量")
@@ -45,16 +47,15 @@ class ReviewVideo(BaseModel):
 
 class ReviewFinal(BaseModel):
     model_config = ConfigDict(extra="allow")
-
     approved: Optional[bool] = Field(default=None, description="是否审核通过,为None时表示尚未决策。")
     reply_to_user: str = Field(default="", description="给用户的回复。")
 
 
 class PostReview(BaseModel):
     model_config = ConfigDict(extra="allow")
-
     review_duplicate: ReviewDuplicate = Field(default_factory=ReviewDuplicate, description="重复检查")
     review_text: ReviewText = Field(default_factory=ReviewText, description="文本评价")
+    review_image_item: ReviewImageItem = Field(default_factory=ReviewImageItem, description="图片目标检测")
     review_image: ReviewImage = Field(default_factory=ReviewImage, description="图片评价")
     review_video: ReviewVideo = Field(default_factory=ReviewVideo, description="视频评价")
     review_final: ReviewFinal = Field(default_factory=ReviewFinal, description="最终审核")

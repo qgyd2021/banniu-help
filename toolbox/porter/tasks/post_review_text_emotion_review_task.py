@@ -1,17 +1,15 @@
 #!/usr/bin/python3
 # -*- coding: utf-8 -*-
 import asyncio
-from datetime import datetime
 import logging
-import os
 from pathlib import Path
 import traceback
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Tuple
 
 logger = logging.getLogger("toolbox")
 
-from project_settings import project_path, environment
-from toolbox.porter.llm import LLMAsJudge, AsyncLLMAsJudge
+from project_settings import environment
+from toolbox.porter.llm import AsyncLLMAsJudge
 from toolbox.porter.tasks.base_task import BaseTask, TaskJsonUtils
 from toolbox.porter.entity.post_meta import PostMeta
 from toolbox.porter.entity.post_review import PostReview
@@ -24,6 +22,9 @@ EMOTION_SYSTEM_PROMPT = """
 ## 任务
 现在我们需要对贴子中文字的部分进行情感判断，以确定它是不是正向积极的内容而不是不利于品牌的消积内容。
 我们将情感定为：积极，中性，消极。
+
+## 注意
+（1）标题或描述太短或语义不全，无法判断情感时，给中性。并描述：“内容少太，无法判断情感。”
 
 ## 输出格式
 必须输出严格的JSON格式，并遵循以下 schema
@@ -90,13 +91,20 @@ class PostReviewTextEmotionReviewTask(BaseTask, TaskJsonUtils):
     async def process_one_file(self, task_file: Path, target_dir: Path):
         payload = await self.load_json_file(task_file)
         post_meta = PostMeta.from_dict(payload["post_meta"])
-        js = await self.score_text(
-            title=post_meta.title,
-            desc=post_meta.desc,
-        )
         post_review = PostReview.from_dict(payload.get("post_review", dict()))
-        post_review.review_text.emotion_label = js["label"]
-        post_review.review_text.emotion_desc = js["desc"]
+
+        if len(post_meta.title) == 0 and len(post_meta.desc) == 0:
+            label = "中性"
+            desc = "标题和内容都为空。"
+        else:
+            js = await self.score_text(
+                title=post_meta.title,
+                desc=post_meta.desc,
+            )
+            label = js["label"]
+            desc = js["desc"]
+        post_review.review_text.emotion_label = label
+        post_review.review_text.emotion_desc = desc
 
         dst = target_dir / task_file.name
         self.safe_move(task_file, dst)

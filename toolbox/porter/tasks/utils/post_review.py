@@ -12,6 +12,7 @@ class PostReviewChecker(object):
         positive_emotion_labels: List[str] = None,
         min_total_text_length: int = 0,
         required_tags_dict: Dict[str, List[str]] = None,
+        required_image_item_dict: Dict[str, List[str]] = None,
         min_image_count: int = 0,
         max_image_cross_rate: float = 0.0,
         min_video_count: int = 0,
@@ -21,6 +22,7 @@ class PostReviewChecker(object):
         self.positive_emotion_labels = positive_emotion_labels or ["积极"]
         self.min_total_text_length = int(min_total_text_length)
         self.required_tags_dict = required_tags_dict or dict()
+        self.required_image_item_dict = required_image_item_dict or dict()
         self.min_image_count = int(min_image_count)
         self.max_image_cross_rate = float(max_image_cross_rate)
         self.min_video_count = int(min_video_count)
@@ -47,6 +49,17 @@ class PostReviewChecker(object):
         tags_miss = [tag for tag in required_tags if tag not in tags_match]
         if len(tags_miss) > 0:
             review_msg["tags_miss"] = f"缺少标签：{'，'.join(tags_miss)}。"
+
+        required_image_items = self.required_image_item_dict.get(product_model, [])
+        image_item_match = list()
+        for image_item in (post_review.review_image_item.images or []):
+            class_counts: dict = image_item.get("class_counts") or {}
+            for k, _ in class_counts.items():
+                if k in required_image_items:
+                    image_item_match.append(k)
+        image_item_miss = [image_item for image_item in required_image_items if image_item not in image_item_match]
+        if len(image_item_miss) > 0:
+            review_msg["image_item_miss"] = f"未从图片中检测到物品：{'，'.join(image_item_miss)}。"
 
         image_total = post_review.review_image.total_count
         image_cross = post_review.review_image.cross_count

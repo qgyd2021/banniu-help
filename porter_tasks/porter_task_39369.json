@@ -171,14 +171,29 @@
   },
   {
     "enable": true,
+    "type": "post_review_image_item_review",
+    "check_interval": 60,
+    "platform_to_dirs": [
+      ["dewu", "temp/banniu_39369/step_5_3_post_review_text_tags_review/dewu", "temp/banniu_39369/step_5_4_post_review_image_item_review/dewu"],
+      ["douyin", "temp/banniu_39369/step_5_3_post_review_text_tags_review/douyin", "temp/banniu_39369/step_5_4_post_review_image_item_review/douyin"],
+      ["xiaohongshu", "temp/banniu_39369/step_5_3_post_review_text_tags_review/xiaohongshu", "temp/banniu_39369/step_5_4_post_review_image_item_review/xiaohongshu"],
+      ["kuaishou", "temp/banniu_39369/step_5_3_post_review_text_tags_review/kuaishou", "temp/banniu_39369/step_5_4_post_review_image_item_review/kuaishou"],
+      ["bilibili", "temp/banniu_39369/step_5_3_post_review_text_tags_review/bilibili", "temp/banniu_39369/step_5_4_post_review_image_item_review/bilibili"],
+      ["xiaoheihe", "temp/banniu_39369/step_5_3_post_review_text_tags_review/xiaoheihe", "temp/banniu_39369/step_5_4_post_review_image_item_review/xiaoheihe"],
+      ["weibo", "temp/banniu_39369/step_5_3_post_review_text_tags_review/weibo", "temp/banniu_39369/step_5_4_post_review_image_item_review/weibo"]
+    ]
+  },
+  {
+    "enable": true,
     "type": "post_review_submit_service",
     "project_id": "39369",
     "app_id": "41339",
     "check_interval": 60,
     "source_dirs": [
-      "temp/banniu_39369/step_5_3_post_review_text_tags_review",
+      "temp/banniu_39369/step_5_4_post_review_image_item_review",
       "temp/banniu_39369/step_2_post_review_router/blank",
       "temp/banniu_39369/step_2_post_review_router/unknown",
+      "temp/banniu_39369/step_5_3_post_review_text_tags_review",
       "temp/banniu_39369/step_5_2_post_review_text_length_review",
       "temp/banniu_39369/step_5_1_post_review_text_emotion_review",
       "temp/banniu_39369/step_4_post_review_duplicate_review",
@@ -208,6 +223,14 @@
         "A7V2": ["迈从", "迈从A7V2"],
         "Ace68V2": ["迈从", "迈从ACE68v2"],
         "K20GT": ["迈从", "迈从K20GT"]
+      },
+      "required_image_item_dict": {
+        "Ace68Turbo":["keyboard"],
+        "Ace68GT": ["keyboard"],
+        "Ace68Air 2": ["keyboard"],
+        "A7V2": ["mouse"],
+        "Ace68V2": ["keyboard"],
+        "K20GT": []
       },
       "min_image_count": 3,
       "max_image_cross_rate": 0.4,

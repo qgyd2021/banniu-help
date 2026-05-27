@@ -7,7 +7,7 @@
 
 ```text
 docker build -t banniu-help:v20260525_1025 .
-docker build -t banniu-help:v20260527_0921 .
+docker build -t banniu-help:v20260527_0928 .
 
 docker stop BanniuHelp && docker rm BanniuHelp
 
@@ -16,14 +16,18 @@ docker run -d \
 --network host \
 --restart always \
 -v /home/honeytian/PycharmProjects/banniu-help/temp:/code/temp \
-banniu-help:v20260527_0921
+-e porter_task_39369=true \
+-e porter_task_portal= \
+banniu-help:v20260527_0928
+
 
 
 ```
 
 
-### 检查项
+### 外部依赖
 
+依赖 ollma
 ```text
 检查 ollama 是否能成功访问：
 
@@ -40,6 +44,18 @@ nvidia-smi
 
 ```
 
+依赖 OpenUltralytics
+
+```text
+
+https://www.modelscope.cn/studios/qgyd2021/OpenUltralytics
+
+已将其部署在本地服务器。
+访问：http://192.168.34.115:7861/
+
+
+
+```
 
 
 ```text

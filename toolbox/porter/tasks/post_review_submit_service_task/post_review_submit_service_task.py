@@ -424,10 +424,12 @@ class PostReviewSubmitServiceTask(BaseTask, TaskJsonUtils):
             },
             "review_data": {
                 "review_text": post_review.review_text.model_dump(),
-                "review_duplicate": post_review.review_duplicate.model_dump(),
-                "review_image": post_review.review_image.model_dump(),
-                "review_video": post_review.review_video.model_dump(),
                 "review_final": post_review_final,
+                "post_review_raw_text": json.dumps(
+                    payload.get("post_review") or {},
+                    ensure_ascii=False,
+                    indent=2,
+                ),
             },
         }
 
@@ -938,13 +940,8 @@ async def main():
     log.setup_size_rotating(log_directory=log_directory, tz_info=time_zone_info)
 
     task = PostReviewSubmitServiceTask(
-        banniu_client_kwargs={
-            "app_key": environment.get("BANNIU_APP_KEY"),
-            "app_secret": environment.get("BANNIU_APP_SECRET"),
-            "access_token": environment.get("BANNIU_ACCESS_TOKEN"),
-        },
-        banniu_project_id="39369",
-        banniu_app_id="21000018",
+        project_id="39369",
+        app_id = "41339",
         check_interval=60,
         source_dirs=[
             "temp/banniu_39369/step_1_banniu_task_download",
@@ -972,7 +969,22 @@ async def main():
         post_review_checker_kwargs={
             "positive_emotion_labels": ["积极"],
             "min_total_text_length": 30,
-            "required_tags": ["迈从"],
+            "required_tags_dict": {
+                "Ace68Turbo": ["迈从", "迈从Ace68Turbo"],
+                "Ace68GT": ["迈从", "迈从Ace68GT"],
+                "Ace68Air 2": ["迈从", "迈从Ace68Air2"],
+                "A7V2": ["迈从", "迈从A7V2"],
+                "Ace68V2": ["迈从", "迈从ACE68v2"],
+                "K20GT": ["迈从", "迈从K20GT"]
+            },
+            "required_image_item_dict": {
+                "Ace68Turbo": ["keyboard"],
+                "Ace68GT": ["keyboard"],
+                "Ace68Air 2": ["keyboard"],
+                "A7V2": ["keyboard"],
+                "Ace68V2": ["keyboard"],
+                "K20GT": ["keyboard"]
+            },
             "min_image_count": 3,
             "max_image_cross_rate": 0.4,
             "min_video_count": 1,

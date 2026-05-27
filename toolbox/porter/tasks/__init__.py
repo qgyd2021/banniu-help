@@ -14,6 +14,7 @@ from toolbox.porter.tasks.share_media_download import (
 from toolbox.porter.tasks.post_review_text_emotion_review_task import PostReviewTextEmotionReviewTask
 from toolbox.porter.tasks.post_review_text_length_review_task import PostReviewTextLengthReviewTask
 from toolbox.porter.tasks.post_review_text_tags_review_task import PostReviewTextTagsReviewTask
+from toolbox.porter.tasks.post_review_image_item_review_task import PostReviewImageItemReviewTask
 from toolbox.porter.tasks.post_review_duplicate_review_task import PostReviewDuplicateReviewTask
 from toolbox.porter.tasks.post_review_submit_service_task import PostReviewSubmitServiceTask
 from toolbox.porter.tasks.post_review_score_task import PostReviewScoreTask, PostReviewOnlyFinal

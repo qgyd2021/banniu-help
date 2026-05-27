@@ -106,9 +106,14 @@ class PostReviewDuplicateReviewTask(BaseTask, TaskJsonUtils):
             for src in files:
                 payload: dict = await self.load_json_file(src)
                 task_id = payload["task_id"]
-                post_meta = PostMeta.from_dict(payload["post_meta"])
+                post_meta = payload.get("post_meta")
+                if post_meta is None:
+                    continue
+                post_meta = PostMeta.from_dict(post_meta)
                 platform = post_meta.platform
                 author_id = post_meta.user_id
+                if len(platform) == 0 or len(author_id) == 0:
+                    continue
                 task_formatted = BanniuTaskFormatted.from_dict(payload["task_formatted"])
                 product_model = task_formatted.product_model
 

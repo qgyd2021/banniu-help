@@ -231,32 +231,8 @@
       <details class="review-panel">
         <summary>审核信息（自动）</summary>
         <div class="review-panel-body">
-          {% set rd_dup = rd.review_duplicate or {} %}
-          {% set ri = rd.review_image or {} %}
-          {% set rv = rd.review_video or {} %}
-          <div class="review-block">
-            <div class="review-block-title">重复发帖</div>
-            {% if rd_dup.duplicate_task_ids %}
-            <div class="review-kv"><span class="k">重复 task_id：</span>{{ rd_dup.duplicate_task_ids | join(', ') }}</div>
-            {% else %}
-            <div class="review-kv">无重复</div>
-            {% endif %}
-          </div>
-          <div class="review-block">
-            <div class="review-block-title">文本</div>
-            <div class="review-kv"><span class="k">情绪：</span>{{ rt.emotion_label or '-' }}（{{ rt.emotion_desc or '-' }}）</div>
-            <div class="review-kv"><span class="k">标题/正文长度：</span>{{ rt.title_length }} / {{ rt.desc_length }}</div>
-            <div class="review-kv"><span class="k">标签匹配：</span>{{ (rt.tags_match or []) | join(', ') or '-' }}</div>
-            <div class="review-kv"><span class="k">标签缺失：</span>{{ (rt.tags_miss or []) | join(', ') or '-' }}</div>
-          </div>
-          <div class="review-block">
-            <div class="review-block-title">图片</div>
-            <div class="review-kv"><span class="k">数量/勾/叉：</span>{{ ri.total_count }} / {{ ri.check_count }} / {{ ri.cross_count }}</div>
-          </div>
-          <div class="review-block">
-            <div class="review-block-title">视频</div>
-            <div class="review-kv"><span class="k">数量/勾/叉：</span>{{ rv.total_count }} / {{ rv.check_count }} / {{ rv.cross_count }}</div>
-          </div>
+          {# 直接 dump 整个 post_review（ensure_ascii=False, indent=2）：以后字段任意增删，前端自动适配，无需改模板。 #}
+          <pre class="review-raw-json">{{ rd.post_review_raw_text }}</pre>
         </div>
       </details>
     </div>

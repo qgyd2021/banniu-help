@@ -339,7 +339,7 @@ class ShareMediaDownload(ShareMediaDownloadRestful):
 
         """
         link = link_tree["result"]["link"]
-        print(f"link: {json.dumps(link, ensure_ascii=False, indent=2)}")
+        # print(f"link: {json.dumps(link, ensure_ascii=False, indent=2)}")
 
         post_meta = PostMeta()
         post_meta.post_type = "build_post_meta_from_tree_branch_1"
@@ -363,7 +363,7 @@ class ShareMediaDownload(ShareMediaDownloadRestful):
         video_urls = list()
         text = link["text"]
         text = json.loads(text)
-        print(f"text: {json.dumps(text, ensure_ascii=False, indent=2)}")
+        # print(f"text: {json.dumps(text, ensure_ascii=False, indent=2)}")
         for item in text:
             item_type = item["type"]
             if item_type in ("text", "html"):
