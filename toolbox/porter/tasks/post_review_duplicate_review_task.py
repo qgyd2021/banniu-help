@@ -113,12 +113,12 @@ class PostReviewDuplicateReviewTask(BaseTask, TaskJsonUtils):
                 platform = post_meta.platform
                 author_id = post_meta.user_id
                 if len(platform) == 0 or len(author_id) == 0:
-                    continue
-                task_formatted = BanniuTaskFormatted.from_dict(payload["task_formatted"])
-                product_model = task_formatted.product_model
-
-                await self.append_new_author_ids(platform, author_id, product_model, task_id)
-                task_ids: set = self.check_duplicate(platform, author_id, product_model, task_id)
+                    task_ids = set()
+                else:
+                    task_formatted = BanniuTaskFormatted.from_dict(payload["task_formatted"])
+                    product_model = task_formatted.product_model
+                    await self.append_new_author_ids(platform, author_id, product_model, task_id)
+                    task_ids: set = self.check_duplicate(platform, author_id, product_model, task_id)
                 post_review = PostReview.from_dict(payload.get("post_review", dict()))
                 post_review.review_duplicate.duplicate_task_ids = list(task_ids)
 
