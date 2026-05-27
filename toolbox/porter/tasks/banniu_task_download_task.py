@@ -180,7 +180,7 @@ class BanNiuTaskDownloadTask(BaseTask):
         # 任务状态; task_status: 0, 待处理; 1, 已完成; 2, 处理中; 3, 暂停中; 4, 已关闭
         # task_status = 0 # 待处理
         # task_status = 2 # 处理中
-        task_status = None
+        # task_status = None
         condition_column = [
             {
                 "字段": "审核状态",
@@ -191,29 +191,30 @@ class BanNiuTaskDownloadTask(BaseTask):
             }
         ]
         all_rows: List[dict] = []
-        page_num = 1
-        while True:
-            js = await self.banniu_client.task_list_pretty(
-                project_id=self.project_id,
-                star_created=star_created,
-                end_created=end_created,
-                page_size=page_size,
-                page_num=page_num,
-                task_status=task_status,
-                condition_column=condition_column,
-            )
-            rows = js["response"]["map"]["result"]
-            form = TaskListForm(raw_rows=rows if isinstance(rows, list) else [])
-            page_rows = form.raw_rows
-            if not page_rows:
-                break
-            all_rows.extend(page_rows)
-            if len(page_rows) < page_size:
-                break
-            page_num += 1
-            if page_num > 200:
-                logger.warning(f"{self.flag}分页超过200页，提前停止。")
-                break
+        for task_status in (0, 2):
+            page_num = 1
+            while True:
+                js = await self.banniu_client.task_list_pretty(
+                    project_id=self.project_id,
+                    star_created=star_created,
+                    end_created=end_created,
+                    page_size=page_size,
+                    page_num=page_num,
+                    task_status=task_status,
+                    condition_column=condition_column,
+                )
+                rows = js["response"]["map"]["result"]
+                form = TaskListForm(raw_rows=rows if isinstance(rows, list) else [])
+                page_rows = form.raw_rows
+                if not page_rows:
+                    break
+                all_rows.extend(page_rows)
+                if len(page_rows) < page_size:
+                    break
+                page_num += 1
+                if page_num > 200:
+                    logger.warning(f"{self.flag}分页超过200页，提前停止。")
+                    break
         return all_rows
 
     @staticmethod

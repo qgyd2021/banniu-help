@@ -7,7 +7,7 @@
 
 ```text
 docker build -t banniu-help:v20260525_1025 .
-docker build -t banniu-help:v20260526_2031 .
+docker build -t banniu-help:v20260527_0921 .
 
 docker stop BanniuHelp && docker rm BanniuHelp
 
@@ -16,7 +16,7 @@ docker run -d \
 --network host \
 --restart always \
 -v /home/honeytian/PycharmProjects/banniu-help/temp:/code/temp \
-banniu-help:v20260526_2031
+banniu-help:v20260527_0921
 
 
 ```
