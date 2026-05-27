@@ -3,7 +3,7 @@
 import asyncio
 import logging
 import json
-import tempfile
+import uuid
 from pathlib import Path
 from typing import Any, Dict, List, Tuple
 
@@ -60,7 +60,6 @@ class PostReviewImageItemReviewTask(BaseTask, TaskJsonUtils):
             "xiaoheihe": XiaoHeiHeFreshImageUrl(),
         }
 
-    @when_error(return_value=None)
     def download_image_to_local(self, platform: str, image_url: str, image_index: int, share_url: str) -> str:
         client = self.image_stream_client_map.get(platform)
         if client is None:
@@ -72,12 +71,14 @@ class PostReviewImageItemReviewTask(BaseTask, TaskJsonUtils):
         )
         temp_dir = temp_directory / "post_review_image_item_review"
         temp_dir.mkdir(parents=True, exist_ok=True)
-        _, filename = tempfile.mkstemp(prefix="", suffix=".jpg", dir=temp_dir.as_posix())
-
-        with open(filename, "wb") as f:
-            for chunk in response.raw.stream(1024 * 128, decode_content=False):
-                if chunk:
-                    f.write(chunk)
+        filename = (temp_dir / f"{uuid.uuid4().hex}.jpg").as_posix()
+        try:
+            with open(filename, "wb") as f:
+                for chunk in response.raw.stream(1024 * 128, decode_content=False):
+                    if chunk:
+                        f.write(chunk)
+        finally:
+            response.close()
         return filename
 
     @when_error(return_value=None)
@@ -90,19 +91,20 @@ class PostReviewImageItemReviewTask(BaseTask, TaskJsonUtils):
             filename: str = self.download_image_to_local(
                 platform=post_meta.platform, image_url=image_url, image_index=idx, share_url=post_meta.share_url
             )
-            _, js = self.yolo_client.predict(
-                image=handle_file(filename),
-                model_choice=self.model_choice,
-                conf=0.25,
-                iou=0.7,
-                imgsz=640,
-                label_area_fraction=1 / 60,
-                api_name=self.api_name,
-            )
+            try:
+                _, js = self.yolo_client.predict(
+                    image=handle_file(filename),
+                    model_choice=self.model_choice,
+                    conf=0.25,
+                    iou=0.7,
+                    imgsz=640,
+                    label_area_fraction=1 / 60,
+                    api_name=self.api_name,
+                )
+            finally:
+                Path(filename).unlink(missing_ok=True)
             js = json.loads(js)
-            # print(f"js: {json.dumps(js, indent=4, ensure_ascii=False)}")
             class_counts = js["results"][0]["class_counts"]
-            # print(f"class_counts: {json.dumps(class_counts, indent=4, ensure_ascii=False)}")
             result.append({
                 "image_url": image_url,
                 "class_counts": class_counts,
