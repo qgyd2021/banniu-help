@@ -178,9 +178,9 @@ class BanNiuTaskDownloadTask(BaseTask):
     async def fetch_task_rows_by_window(self, star_created: str, end_created: str) -> List[dict]:
         page_size = 50
         # 任务状态; task_status: 0, 待处理; 1, 已完成; 2, 处理中; 3, 暂停中; 4, 已关闭
-        task_status = 0 # 待处理
+        # task_status = 0 # 待处理
         # task_status = 2 # 处理中
-        # task_status = None
+        task_status = None
         condition_column = [
             {
                 "字段": "审核状态",

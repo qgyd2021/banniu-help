@@ -7,6 +7,7 @@
 
 ```text
 docker build -t banniu-help:v20260525_1025 .
+docker build -t banniu-help:v20260526_2031 .
 
 docker stop BanniuHelp && docker rm BanniuHelp
 
@@ -15,7 +16,7 @@ docker run -d \
 --network host \
 --restart always \
 -v /home/honeytian/PycharmProjects/banniu-help/temp:/code/temp \
-banniu-help:v20260525_1025
+banniu-help:v20260526_2031
 
 
 ```
@@ -34,6 +35,8 @@ curl -X POST http://127.0.0.1:11434/v1/chat/completions \
     "messages": [{"role": "user", "content": "你好，请简单介绍一下自己"}],
     "max_tokens": 50
   }'
+
+nvidia-smi
 
 ```
 
