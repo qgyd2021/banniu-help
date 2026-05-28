@@ -222,7 +222,7 @@
         "Ace68Air 2": ["迈从", "迈从Ace68Air2"],
         "A7V2": ["迈从", "迈从A7V2"],
         "Ace68V2": ["迈从", "迈从ACE68v2"],
-        "K20GT": ["迈从", "迈从K20GT"]
+        "K20GT": ["迈从", "迈从K20GT", "迈从K20 GT"]
       },
       "required_image_item_dict": {
         "Ace68Turbo":["keyboard"],
