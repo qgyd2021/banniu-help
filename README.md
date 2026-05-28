@@ -8,7 +8,7 @@
 ```text
 banniu-help:v20260527_0928
 
-docker build -t banniu-help:v20260527_1739 .
+docker build -t banniu-help:v20260528_1011 .
 
 docker stop BanniuHelp && docker rm BanniuHelp
 
@@ -17,7 +17,7 @@ docker run -d \
 --network host \
 --restart always \
 -v /home/honeytian/PycharmProjects/banniu-help/temp:/code/temp \
-banniu-help:v20260527_1739
+banniu-help:v20260528_1011
 
 
 ```
@@ -25,7 +25,7 @@ banniu-help:v20260527_1739
 
 ### 外部依赖
 
-依赖 ollma
+依赖 ollama
 ```text
 检查 ollama 是否能成功访问：
 

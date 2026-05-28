@@ -3,6 +3,7 @@
 import json
 from typing import Dict, List, Tuple, Optional
 
+from toolbox.porter.entity.banniu_task import BanniuTaskFormatted
 from toolbox.porter.entity.post_review import PostReview
 
 
@@ -28,8 +29,15 @@ class PostReviewChecker(object):
         self.min_video_count = int(min_video_count)
         self.max_video_cross_rate = float(max_video_cross_rate)
 
-    def predict(self, post_review: PostReview, product_model: str = "") -> dict:
+    def predict(self, post_review: PostReview, task_formatted: BanniuTaskFormatted) -> dict:
+        product_model = task_formatted.product_model
+
         review_msg = dict()
+        #旺店通-商家编号
+        merchant_id = task_formatted.purchase_info_dict.get("39400", "")
+        if product_model not in merchant_id:
+            review_msg["product_model"] = f"用户给的产品型号与订单信息不匹配。{product_model}，{merchant_id}"
+
         duplicate_task_ids = post_review.review_duplicate.duplicate_task_ids or []
         if len(duplicate_task_ids) > 0:
             review_msg["review_duplicate"] = f"重复提交；重复ID：{'，'.join(duplicate_task_ids)}。"

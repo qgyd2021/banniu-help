@@ -214,8 +214,8 @@
     "port": 18001,
     "service_registry_dir": "temp/banniu_39369/service_registry",
     "post_review_checker_kwargs": {
-      "positive_emotion_labels": ["积极"],
-      "min_total_text_length": 30,
+      "positive_emotion_labels": ["积极", "中性"],
+      "min_total_text_length": 10,
       "required_tags_dict": {
         "Ace68Turbo": ["迈从", "迈从Ace68Turbo"],
         "Ace68GT": ["迈从", "迈从Ace68GT"],
@@ -232,8 +232,8 @@
         "Ace68V2": ["keyboard"],
         "K20GT": []
       },
-      "min_image_count": 3,
-      "max_image_cross_rate": 0.4,
+      "min_image_count": 1,
+      "max_image_cross_rate": 0.5,
       "min_video_count": 1,
       "max_video_cross_rate": 0.5
     }

@@ -376,14 +376,7 @@ class PostReviewSubmitServiceTask(BaseTask, TaskJsonUtils):
             post_review_final = post_review.review_final.model_dump()
         final_key = self._final_approved_key(prf_raw, post_review)
 
-        purchase_info: Any = task_formatted.purchase_info or ""
-        try:
-            purchase_info = json.loads(purchase_info)
-            purchase_info = purchase_info[0]
-        except (json.decoder.JSONDecodeError, IndexError, TypeError):
-            purchase_info = dict()
-        if not isinstance(purchase_info, dict):
-            purchase_info = dict()
+        purchase_info = task_formatted.purchase_info_dict
 
         return {
             "source_file": fp.as_posix(),
@@ -706,9 +699,8 @@ class PostReviewSubmitServiceTask(BaseTask, TaskJsonUtils):
             reason=payload.reason,
         )
         task_formatted = BanniuTaskFormatted.from_dict(js.get("task_formatted"))
-        product_model = (task_formatted.product_model or "").strip()
 
-        result = self.post_review_checker.predict(post_review, product_model=product_model)
+        result = self.post_review_checker.predict(post_review=post_review, task_formatted=task_formatted)
         result = {
             "approval": bool(result.get("approval", False)),
             "review_msg": result.get("review_msg", {}) or {},

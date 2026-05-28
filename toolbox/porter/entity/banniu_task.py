@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 from __future__ import annotations
 
+import json
 from typing import Any, Dict, Optional, Union
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -80,6 +81,16 @@ class BanniuTaskFormatted(BaseModel):
         # values.pop("内容链接", None)
         # values.pop("晒单内容链接", None)
         return values
+
+    @property
+    def purchase_info_dict(self) -> Dict[str, Any]:
+        raw = self.purchase_info or ""
+        try:
+            parsed = json.loads(raw)
+            item = parsed[0]
+        except (json.JSONDecodeError, IndexError, TypeError):
+            return {}
+        return item if isinstance(item, dict) else {}
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "BanniuTaskFormatted":
