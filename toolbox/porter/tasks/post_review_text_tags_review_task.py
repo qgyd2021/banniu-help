@@ -59,7 +59,7 @@ class PostReviewTextTagsReviewTask(BaseTask, TaskJsonUtils):
 
                 product_tags_config: Dict[str, List[str]] = self.tags_config.get(task_formatted.product_model)
 
-                user_tags = [str(tag).lower().strip().strip("#") for tag in post_meta.tags]
+                user_tags = [str(tag).strip().strip("#").strip().lower() for tag in post_meta.tags]
 
                 match = set()
                 for standard, similar_list in product_tags_config.items():

@@ -294,8 +294,11 @@ class ShareMediaDownload(ShareMediaDownloadRestful):
 
         dynamic_id = self.parse_dynamic_id_by_url(final_url)
         if dynamic_id is not None:
-            web_dynamic = self.get_web_dynamic_by_dynamic_id(dynamic_id)
-            post_meta = self.build_post_meta_from_web_dynamic_opus_branch_1(web_dynamic, dynamic_id)
+            try:
+                web_dynamic = self.get_web_dynamic_by_dynamic_id(dynamic_id)
+                post_meta = self.build_post_meta_from_web_dynamic_opus_branch_1(web_dynamic, dynamic_id)
+            except ExpectedError:
+                pass
         if post_meta is None:
             init_state = self.get_init_state_by_final_url(final_url)
             post_meta = self.build_post_meta_from_init_state_branch_2(init_state)
@@ -519,7 +522,7 @@ def main():
     """
     client = ShareMediaDownload()
     share_text = """
-https://www.bilibili.com/video/BV1k9Gv6TEpD/?spm_id_from=333.1387.homepage.video_card.click&vd_source=85f2139356764e5ada5e12e67794b1ae
+https://www.bilibili.com/opus/1204749789822976016?plat_id=186&share_from=dynamic&share_medium=android&share_plat=android&share_session_id=b95dbde9-aa4b-44df-87a6-f08d030a0ebe&share_source=COPY&share_tag=s_i&spmid=dt.opus-detail.0.0&timestamp=1779341157&unique_k=tpUO6lL
 
 """
     post_meta = client.get_post_meta_by_share_text(share_text)

@@ -50,32 +50,31 @@ class PostReviewChecker(object):
         if len(tags_miss) > 0:
             review_msg["tags_miss"] = f"缺少标签：{'，'.join(tags_miss)}。"
 
-        required_image_items = self.required_image_item_dict.get(product_model, [])
-        image_item_match = list()
-        for image_item in (post_review.review_image_item.images or []):
-            class_counts: dict = image_item.get("class_counts") or {}
-            for k, _ in class_counts.items():
-                if k in required_image_items:
-                    image_item_match.append(k)
-        image_item_miss = [image_item for image_item in required_image_items if image_item not in image_item_match]
-        if len(image_item_miss) > 0:
-            review_msg["image_item_miss"] = f"未从图片中检测到物品：{'，'.join(image_item_miss)}。"
-
         image_total = post_review.review_image.total_count
         image_cross = post_review.review_image.cross_count
 
         video_total = post_review.review_video.total_count
         video_cross = post_review.review_video.cross_count
 
-        # “数量太少”采用互斥规则：仅当帖子是“纯图帖”/“纯视频帖”时校验对应媒体下限，
-        # 避免对“仅有视频但没图片”的帖子误报“图片太少”，反之亦然。
+        if image_total > 0:
+            required_image_items = self.required_image_item_dict.get(product_model, [])
+            image_item_match = list()
+            for image_item in (post_review.review_image_item.images or []):
+                class_counts: dict = image_item.get("class_counts") or {}
+                for k, _ in class_counts.items():
+                    if k in required_image_items:
+                        image_item_match.append(k)
+            image_item_miss = [image_item for image_item in required_image_items if image_item not in image_item_match]
+            if len(image_item_miss) > 0:
+                review_msg["image_item_miss"] = f"未从图片中检测到物品：{'，'.join(image_item_miss)}。"
+
         if video_total <= 0 and image_total < self.min_image_count:
             review_msg["min_image_count"] = f"图片太少；当前图片数量: {image_total}。"
         if image_total <= 0 and video_total < self.min_video_count:
             review_msg["min_video_count"] = f"视频太少；当前视频数量: {video_total}。"
+        if image_total <= 0 and video_total <= 0:
+            review_msg["image_and_video"] = "必须要有图片或视频。"
 
-        # “不符合率过高”只要有图片/视频就分别校验；
-        # 任意一种媒体被全部标为“不符合”都应当触发审核不通过。
         if image_total > 0:
             image_cross_rate = image_cross / image_total
             if image_cross_rate > self.max_image_cross_rate:
@@ -85,9 +84,6 @@ class PostReviewChecker(object):
             video_cross_rate = video_cross / video_total
             if video_cross_rate > self.max_video_cross_rate:
                 review_msg["max_video_cross_rate"] = f"太多不符合的视频；视频总数: {video_total}，不符合的视频数：{video_cross}。"
-
-        if image_total == 0 and video_total == 0:
-            review_msg["image_and_video"] = "必须要有图片或视频。"
 
         if post_review.review_final.approved is False:
             review_msg["review_final"] = f"人工已审核为不通过；{post_review.review_final.reply_to_user}。"
