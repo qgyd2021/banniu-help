@@ -170,13 +170,8 @@ class PostReviewScoreTask(BaseTask, TaskJsonUtils):
                         )
 
                 dst = target_dir / src.name
+                await self.append_kv_to_task_file(src, kv={"post_review_final": post_review_final.to_dict()})
                 self.safe_move(src, dst)
-                await self.append_kv_to_task_file(
-                    dst,
-                    kv={
-                        "post_review_final": post_review_final.to_dict(),
-                    },
-                )
 
 
 @BaseTask.register("post_review_only_final", exist_ok=True)
@@ -220,13 +215,8 @@ class PostReviewOnlyFinal(BaseTask, TaskJsonUtils):
                 post_review_final.reviewer = "人工终审"
 
                 dst = target_dir / src.name
+                await self.append_kv_to_task_file(src, kv={"post_review_final": post_review_final.to_dict()})
                 self.safe_move(src, dst)
-                await self.append_kv_to_task_file(
-                    dst,
-                    kv={
-                        "post_review_final": post_review_final.to_dict(),
-                    },
-                )
 
 
 @BaseTask.register("post_review_automatic_final", exist_ok=True)
@@ -291,13 +281,8 @@ class PostReviewAutomaticFinal(BaseTask, TaskJsonUtils):
                 # TODO: 选设置60秒审一个，控制频率，等后续感觉没问题了，再放开。
                 await asyncio.sleep(60)
                 dst = target_dir / src.name
+                await self.append_kv_to_task_file(src, kv={"post_review_final": post_review_final.to_dict()})
                 self.safe_move(src, dst)
-                await self.append_kv_to_task_file(
-                    dst,
-                    kv={
-                        "post_review_final": post_review_final.to_dict(),
-                    },
-                )
 
 
 async def main() -> None:

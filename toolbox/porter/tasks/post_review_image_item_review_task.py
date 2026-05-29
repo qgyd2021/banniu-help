@@ -114,8 +114,8 @@ class PostReviewImageItemReviewTask(BaseTask, TaskJsonUtils):
         post_review.review_image_item.images = result
 
         dst = target_dir / task_file.name
+        await self.append_kv_to_task_file(task_file, kv={"post_review": post_review.to_dict()})
         self.safe_move(task_file, dst)
-        await self.append_kv_to_task_file(dst, kv={"post_review": post_review.to_dict()})
         return dst
 
     async def do_task(self):

@@ -24,18 +24,11 @@ def get_shell_tab():
         gr.Examples(
             examples=[
                 [
-                    "echo \"CPU使用率: $(grep 'cpu ' /proc/stat | awk '{usage=($2+$4)*100/($2+$4+$5)} END {print usage \"%\"}')\""
-                ], [
-                    "echo \"内存使用: $(free -m | awk '/Mem:/ {printf \"%.1f%%\", $3/$2*100}')\""
-                ], [
-                    "echo \"内存总量: $(grep MemTotal /proc/meminfo | awk '{print $2/1024 \" MB\"}')\""
-                ], [
-                    "echo \"可用内存: $(grep MemAvailable /proc/meminfo | awk '{print $2/1024 \" MB\"}')\""
-                ], [
-                    "grep 'less' logs/info.log | tail -n 15"
-                ], [
-                    "ffmpeg -i /home/user/app/data/video/download/video.mp4 -vn -acodec libmp3lame -q:a 2 /home/user/app/data/video/download/audio.mp3"
-                ]
+                    'for dir in /code/temp/banniu_39369/step_2_post_review_router/*/; do echo -n "$dir: "; find "$dir" -type f | wc -l; done'
+                ],
+                [
+                    'for dir in /code/temp/banniu_39369/step_8_finished/*/; do echo -n "$dir: "; find "$dir" -type f | wc -l; done'
+                ],
             ],
             inputs=[shell_text],
             outputs=[shell_output],

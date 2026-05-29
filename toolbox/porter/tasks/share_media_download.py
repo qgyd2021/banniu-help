@@ -86,8 +86,8 @@ class ShareMediaDownloadTaskBase(BaseTask, TaskJsonUtils):
 
             self.output_dir.mkdir(parents=True, exist_ok=True)
             dst = self.output_dir / task_file.name
+            await self.append_kv_to_task_file(task_file, kv={"post_meta": post_meta.to_dict()})
             self.safe_move(task_file, dst)
-            await self.append_kv_to_task_file(dst, kv={"post_meta": post_meta.to_dict()})
             logger.info(f"{self.flag}任务流转并补充元信息成功: {dst.as_posix()}")
 
 

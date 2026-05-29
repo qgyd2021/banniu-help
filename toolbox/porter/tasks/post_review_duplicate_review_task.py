@@ -123,8 +123,8 @@ class PostReviewDuplicateReviewTask(BaseTask, TaskJsonUtils):
                 post_review.review_duplicate.duplicate_task_ids = list(task_ids)
 
                 dst = target_dir / src.name
+                await self.append_kv_to_task_file(src, kv={"post_review": post_review.to_dict()})
                 self.safe_move(src, dst)
-                await self.append_kv_to_task_file(dst, kv={"post_review": post_review.to_dict()})
 
 
 def main():

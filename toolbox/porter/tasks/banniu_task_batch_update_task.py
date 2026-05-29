@@ -196,7 +196,6 @@ class BanNiuTaskBatchUpdateTask(BaseTask, TaskJsonUtils):
                         fail += 1
                         continue
                     final = self.safe_move(fp, dst_dir / fp.name)
-                    await self.write_json(final, payload)
                     ok += 1
                     logger.info(
                         f"{self.flag}批量回写成功并流转: task_id={task_id}, platform={item['platform']}, "

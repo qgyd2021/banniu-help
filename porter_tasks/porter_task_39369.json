@@ -213,6 +213,7 @@
     "target_dir": "temp/banniu_39369/step_6_post_review_submit",
     "port": 18001,
     "service_registry_dir": "temp/banniu_39369/service_registry",
+    "service_access_path": "http://192.168.34.115:18001/gallery",
     "post_review_checker_kwargs": {
       "positive_emotion_labels": ["积极", "中性"],
       "min_total_text_length": 10,

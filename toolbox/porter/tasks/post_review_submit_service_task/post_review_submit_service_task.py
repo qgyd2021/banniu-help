@@ -165,6 +165,7 @@ class PostReviewSubmitServiceTask(BaseTask, TaskJsonUtils):
         registry_dir.mkdir(parents=True, exist_ok=True)
         service_dir = registry_dir
         service_dir.mkdir(parents=True, exist_ok=True)
+
         access_path = self.service_access_path or f"http://{self.host}:{self.port}/gallery"
         payload = {
             "service_name": self.service_name,
