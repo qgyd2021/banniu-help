@@ -106,6 +106,8 @@
           <span class="final-chip {% if row.final_approved_key == 'true' %}pass{% elif row.final_approved_key == 'false' %}reject{% endif %}">
             终审：{% if row.final_approved_key == 'true' %}已通过{% elif row.final_approved_key == 'false' %}未通过{% else %}未决策{% endif %}
           </span>
+          {# reviewer 是新加的字段，旧 JSON 里可能没有；缺失时 rf.reviewer 为 Undefined，or '' 兜底为空串 #}
+          {% if rf.reviewer %}<span class="reviewer-chip">审核员：{{ rf.reviewer or '' }}</span>{% endif %}
         </div>
         <div class="info-line"><span class="label">标题：</span><span class="value">{{ pd.title or '-' }}</span></div>
         <div class="info-line"><span class="label">正文：</span><span class="value">{{ pd.desc or '-' }}</span></div>

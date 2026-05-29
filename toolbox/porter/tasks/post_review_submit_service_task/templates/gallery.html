@@ -253,6 +253,14 @@
     }
     .final-chip.pass { background: #f6ffed; color: #389e0d; border: 1px solid #b7eb8f; }
     .final-chip.reject { background: #fff2f0; color: #cf1322; border: 1px solid #ffccc7; }
+    .reviewer-chip {
+      font-size: 11px;
+      padding: 2px 8px;
+      border-radius: 999px;
+      background: #fafafa;
+      color: #595959;
+      border: 1px solid #e8e8e8;
+    }
     .section-label { font-size: 11px; color: #8c8c8c; margin-bottom: 6px; text-transform: uppercase; letter-spacing: .5px; }
 
     .title-text { font-size: 14px; font-weight: 600; color: #1d2129; line-height: 1.5; word-break: break-word; }
@@ -559,6 +567,15 @@
         <option value="true">已通过</option>
         <option value="false">已驳回</option>
         <option value="none" selected>未决策</option>
+      </select>
+    </div>
+    <div class="filter-group">
+      <label for="filterReviewer">审核员</label>
+      <select id="filterReviewer">
+        <option value="">全部</option>
+        {% for v in reviewers %}
+        <option value="{{ v }}">{{ v }}</option>
+        {% endfor %}
       </select>
     </div>
     <div class="filter-actions">
@@ -890,18 +907,10 @@
 
     renderAutoCheck(rowEl, { status: 'loading' });
 
-    const finalVal = rowEl.dataset.finalApproved || '';
     const body = {
       source_file: sourceFile,
       media_marks: collectMediaMarks(rowEl),
     };
-    if (finalVal === 'true') {
-      body.approved = true;
-      body.reason = (rowEl.querySelector('.review-reason')?.value || '').trim();
-    } else if (finalVal === 'false') {
-      body.approved = false;
-      body.reason = (rowEl.querySelector('.review-reason')?.value || '').trim();
-    }
 
     try {
       const result = await callApi('/api/post-review-check', body, { signal: ctrl.signal });
@@ -1153,12 +1162,14 @@
   const filterReviewStatus = document.getElementById('filterReviewStatus');
   const filterTaskStatus = document.getElementById('filterTaskStatus');
   const filterFinalApproved = document.getElementById('filterFinalApproved');
+  const filterReviewer = document.getElementById('filterReviewer');
   const filterResetBtn = document.getElementById('filterResetBtn');
 
   // 把筛选条件缓存到 sessionStorage：刷新页面后自动还原，关闭标签页则自然清空。
   // bump key 后缀（v1 → v2 → ...）即可在筛选结构升级时丢弃旧值。
   // v3: 创建时间 input 重新回到 datetime-local，旧 v2 的 "yyyy-MM-dd" 不再兼容。
-  const FILTERS_STORAGE_KEY = 'post_review_submit_filters_v3';
+  // v4: 新增 reviewer 字段。
+  const FILTERS_STORAGE_KEY = 'post_review_submit_filters_v4';
 
   function saveFiltersToStorage() {
     try {
@@ -1170,6 +1181,7 @@
         review_status: filterReviewStatus?.value || '',
         task_status: filterTaskStatus?.value || '',
         final_approved: filterFinalApproved?.value || '',
+        reviewer: filterReviewer?.value || '',
       };
       sessionStorage.setItem(FILTERS_STORAGE_KEY, JSON.stringify(data));
     } catch (err) {
@@ -1194,6 +1206,7 @@
     if (filterReviewStatus && typeof data.review_status === 'string') filterReviewStatus.value = data.review_status;
     if (filterTaskStatus && typeof data.task_status === 'string') filterTaskStatus.value = data.task_status;
     if (filterFinalApproved && typeof data.final_approved === 'string') filterFinalApproved.value = data.final_approved;
+    if (filterReviewer && typeof data.reviewer === 'string') filterReviewer.value = data.reviewer;
   }
 
   // 按天筛选友好：用户在 datetime-local 上选完日期那一刻，把时分自动设为 defaultTime
@@ -1323,6 +1336,7 @@
       review_status: (filterReviewStatus?.value || '').trim(),
       task_status: (filterTaskStatus?.value || '').trim(),
       final_approved: (filterFinalApproved?.value || '').trim(),
+      reviewer: (filterReviewer?.value || '').trim(),
     };
   }
 
@@ -1340,6 +1354,7 @@
     if (f.review_status) parts.push(`审核=${f.review_status}`);
     if (f.task_status) parts.push(`任务=${f.task_status}`);
     if (f.final_approved) parts.push(`终审=${f.final_approved}`);
+    if (f.reviewer) parts.push(`审核员=${f.reviewer}`);
     if (f.created_start || f.created_end) parts.push('已限创建时间');
     searchSummary.textContent = parts.join(' · ');
     if (searchEmptyHint) {
@@ -1440,7 +1455,7 @@
     }
   });
   [filterProductModel, filterReviewStatus, filterTaskStatus, filterFinalApproved,
-   filterCreatedStart, filterCreatedEnd].forEach((el) => {
+   filterReviewer, filterCreatedStart, filterCreatedEnd].forEach((el) => {
     el?.addEventListener('change', () => reloadRows());
   });
 
@@ -1452,6 +1467,7 @@
     if (filterReviewStatus) filterReviewStatus.value = '';
     if (filterTaskStatus) filterTaskStatus.value = '';
     if (filterFinalApproved) filterFinalApproved.value = 'none';
+    if (filterReviewer) filterReviewer.value = '';
     reloadRows();
   });
 
@@ -1691,7 +1707,6 @@
       }
       syncFinalButtons(rowEl);
       syncFinalSuggestMatched(rowEl);
-      scheduleAutoCheck(rowEl);
       return;
     }
 
@@ -1710,9 +1725,6 @@
       if (!rowEl) return;
       // 用户开始输入后清除"必填未填"红边提示
       if ((target.value || '').trim()) target.classList.remove('invalid');
-      const finalVal = rowEl.dataset.finalApproved || '';
-      // 只有"审核不通过"时备注才参与判定，其他状态重跑没意义。
-      if (finalVal === 'false') scheduleAutoCheck(rowEl, 700);
     }
   });
 

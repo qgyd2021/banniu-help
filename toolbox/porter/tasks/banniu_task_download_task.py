@@ -32,7 +32,6 @@ class BanNiuTaskDownloadTask(BaseTask):
                  output_dir: str = "banniu_task_download/tasks",
                  last_fetch_tasks: str = "banniu_task_download/last_fetch_tasks.json",
                  last_fetch_time_txt: str = "banniu_task_download/last_fetch_time.txt",
-                 **kwargs
                  ):
         super().__init__(
             flag=f"[{self.__class__.__name__}_ProjectId_{project_id}]",

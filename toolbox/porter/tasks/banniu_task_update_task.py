@@ -36,7 +36,6 @@ class BanNiuTaskUpdateTask(BaseTask):
                  key_of_app_key: str = "BANNIU_APP_KEY",
                  key_of_app_secret: str = "BANNIU_APP_SECRET",
                  key_of_access_token: str = "BANNIU_ACCESS_TOKEN",
-                 **kwargs
                  ):
         super().__init__(
             flag=f"[{self.__class__.__name__}_ProjectId_{project_id}]",

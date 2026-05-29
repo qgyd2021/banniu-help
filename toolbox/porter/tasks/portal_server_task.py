@@ -30,7 +30,6 @@ class PortalServerTask(BaseTask):
         host: str = "0.0.0.0",
         port: int = 7000,
         title: str = "审核服务入口",
-        **kwargs,
     ):
         super().__init__(flag=f"[{self.__class__.__name__}]", check_interval=check_interval)
         self.registry_dir = self._resolve_project_path(registry_dir)

@@ -25,7 +25,7 @@ from toolbox.porter.tasks.post_review_submit_service_task.route_wrap.common_rout
     common_route_wrap,
     async_common_route_wrap,
 )
-from toolbox.porter.tasks.utils.post_review import PostReviewChecker
+from toolbox.porter.tasks.utils.post_review import PostReviewChecker, PostReviewCheckerResult
 from toolbox.porter.entity.banniu_task import BanniuTaskFormatted
 from toolbox.porter.entity.post_meta import PostMeta
 from toolbox.porter.entity.post_review import PostReview
@@ -65,6 +65,7 @@ class NextRowsRequest(BaseModel):
     review_status: Optional[str] = ""
     task_status: Optional[str] = ""
     final_approved: Optional[str] = ""
+    reviewer: Optional[str] = ""
     created_start: Optional[str] = ""
     created_end: Optional[str] = ""
     exclude_task_ids: Optional[List[str]] = None
@@ -254,6 +255,15 @@ class PostReviewSubmitServiceTask(BaseTask, TaskJsonUtils):
         return out
 
     @staticmethod
+    def _extract_reviewer(payload: Dict[str, Any]) -> str:
+        prf = payload.get("post_review_final")
+        if isinstance(prf, dict):
+            v = prf.get("reviewer")
+            if isinstance(v, str) and v.strip():
+                return v.strip()
+        return ""
+
+    @staticmethod
     def _extract_platform(payload: Dict[str, Any]) -> Optional[str]:
         """从 payload 提取 platform：仅从 post_meta.platform 取。
 
@@ -344,6 +354,8 @@ class PostReviewSubmitServiceTask(BaseTask, TaskJsonUtils):
                     ]
                 ).lower()
 
+                reviewer = self._extract_reviewer(payload)
+
                 idx_map[task_id] = {
                     "source_file": fp.as_posix(),
                     "task_id": task_id,
@@ -353,6 +365,7 @@ class PostReviewSubmitServiceTask(BaseTask, TaskJsonUtils):
                     "task_status": task_status,
                     "created_at": created_at,
                     "final_approved_key": final_key,
+                    "reviewer": reviewer,
                     "search_blob": search_blob,
                 }
         return list(idx_map.values())
@@ -416,8 +429,8 @@ class PostReviewSubmitServiceTask(BaseTask, TaskJsonUtils):
                 "tags": post_meta.tags or [],
             },
             "review_data": {
-                "review_text": post_review.review_text.model_dump(),
                 "review_final": post_review_final,
+                "review_text": post_review.review_text.model_dump(),
                 "post_review_raw_text": json.dumps(
                     payload.get("post_review") or {},
                     ensure_ascii=False,
@@ -473,6 +486,11 @@ class PostReviewSubmitServiceTask(BaseTask, TaskJsonUtils):
             if final_key != final_approved:
                 return False
 
+        reviewer = (req.reviewer or "").strip()
+        if reviewer:
+            if self._extract_reviewer(payload) != reviewer:
+                return False
+
         q = (req.keyword or "").strip().lower()
         if q:
             pm = payload.get("post_meta") or {}
@@ -508,24 +526,6 @@ class PostReviewSubmitServiceTask(BaseTask, TaskJsonUtils):
                 seen.add(v)
                 out.append(v)
         return sorted(out)
-
-    def collect_post_rows(self) -> List[Dict[str, Any]]:
-        """旧接口：构造全部完整 rows（保留作兼容外部调用入口，gallery 已不调用）。"""
-        rows: List[Dict[str, Any]] = []
-        for e in self._iter_task_indices():
-            payload = self.read_task_json(e["source_file"])
-            if not payload:
-                continue
-            row = self._row_from_payload(payload, Path(e["source_file"]))
-            if row is not None:
-                rows.append(row)
-        rows.sort(
-            key=lambda x: (
-                x["post_data"]["platform"],
-                x["banniu_data"]["创建时间"],
-            )
-        )
-        return rows
 
     def api_media_stream(
         self,
@@ -700,10 +700,10 @@ class PostReviewSubmitServiceTask(BaseTask, TaskJsonUtils):
         )
         task_formatted = BanniuTaskFormatted.from_dict(js.get("task_formatted"))
 
-        result = self.post_review_checker.predict(post_review=post_review, task_formatted=task_formatted)
+        result: PostReviewCheckerResult = self.post_review_checker.predict(post_review=post_review, task_formatted=task_formatted)
         result = {
-            "approval": bool(result.get("approval", False)),
-            "review_msg": result.get("review_msg", {}) or {},
+            "approval": result.approval,
+            "review_msg": result.review_msg.to_dict(),
         }
         return result
 
@@ -729,6 +729,8 @@ class PostReviewSubmitServiceTask(BaseTask, TaskJsonUtils):
             raise ExpectedError(status_code=60400, message="源文件不是合法的 JSON 对象")
 
         platform = js.get("post_meta", dict()).get("platform", "unknown")
+        if isinstance(platform, str) and len(platform) == 0:
+            platform = "unknown"
         target = step_target_root / platform / src.name
 
         post_review = self.build_post_review_with_marks(
@@ -826,6 +828,7 @@ class PostReviewSubmitServiceTask(BaseTask, TaskJsonUtils):
                 "product_models": self._uniq_index(entries, "product_model"),
                 "review_statuses": self._uniq_index(entries, "review_status"),
                 "task_statuses": self._uniq_index(entries, "task_status"),
+                "reviewers": self._uniq_index(entries, "reviewer"),
             },
         )
 

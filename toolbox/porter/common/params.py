@@ -25,9 +25,6 @@ class Params(Registrable):
     因此, 都应实现 __init__ 方法.
 
     """
-    # def __init__(self):
-    #     # Subclasses should override this method, even if it is def __init__(self): pass
-    #     pass
 
     @classmethod
     def from_json(cls, params: dict = None, global_params: dict = None):
@@ -48,7 +45,7 @@ class Params(Registrable):
 
         kwargs = dict()
         for k, v in signature.parameters.items():
-            if k in ("self",):
+            if k == "self":
                 continue
             if k in ("args", "kwargs"):
                 msg = (
@@ -56,7 +53,7 @@ class Params(Registrable):
                     f"you may need to override the __init__ method of cls: {cls.__name__}."
                 )
                 logger.warning(msg)
-                print(msg)
+                # print(msg)
                 continue
 
             if v.annotation is inspect._empty:
@@ -75,31 +72,7 @@ class Params(Registrable):
             if isinstance(v.annotation, str):
                 raise NotImplementedError("string annotation not supported.")
 
-            if hasattr(v.annotation, "_subs_tree"):
-                # typing 标注类型.
-                subs_tree = v.annotation._subs_tree()
-                kwargs[v.name] = cls.from_annotation(sub_params, global_params, subs_tree)
-            elif isinstance(v.annotation, typing._GenericAlias):
-                # typing 标注类型.
-                subs_tree = (v.annotation.__origin__, *v.annotation.__args__)
-                kwargs[v.name] = cls.from_annotation(sub_params, global_params, subs_tree)
-            elif issubclass(v.annotation, Params):
-                # Params 子类.
-                kwargs[v.name] = v.annotation.from_json(
-                    sub_params, global_params
-                )
-            elif isinstance(sub_params, v.annotation):
-                # 传入的是已实例化好的值.
-                kwargs[v.name] = sub_params
-            else:
-                # str, int, list, dict 等基本类型.
-                value = sub_params
-                if isinstance(value, dict):
-                    value = v.annotation(**value)
-                else:
-                    value = v.annotation(value)
-
-                kwargs[v.name] = value
+            kwargs[v.name] = cls.from_annotation(sub_params, global_params, v.annotation)
 
         obj = cls.__new__(cls, **kwargs)
         try:
@@ -114,83 +87,87 @@ class Params(Registrable):
         return obj
 
     @classmethod
-    def from_annotation(cls, params, global_params: dict, subs_tree=None):
-        if params is None:
-            return params
-        if subs_tree is None:
+    def from_annotation(cls, params, global_params: dict, annotation=None):
+        """递归把 JSON 原值按 ``annotation`` 标注的类型还原。
+
+        使用 ``typing.get_origin`` / ``typing.get_args`` 规范处理嵌套泛型，
+        避免依赖 ``typing._GenericAlias`` / ``_subs_tree`` 这类私有 / 旧版 API；
+        在 3.9+/3.12 上能正确解析 ``List[Tuple[str, str, str]]``、
+        ``Dict[str, List[str]]``、``Optional[X]`` 等组合。
+        """
+        if annotation is None:
             return params
 
-        if isinstance(subs_tree, tuple) and len(subs_tree) > 1:
-            # such as: (Dict, str, int) in List[Dict[str, int]]
-            args_type = subs_tree[0]
-            annotation = subs_tree[1:]
-        elif isinstance(subs_tree, tuple) and len(subs_tree) == 1:
-            args_type = subs_tree[0]
-            annotation = None
-        else:
-            args_type = subs_tree
-            annotation = None
+        if annotation is typing.Any:
+            return params
 
-        if args_type is typing.List or args_type is list:
-            result = list()
-            for param in params:
-                result.append(cls.from_annotation(param, global_params, annotation))
-            return result
-        elif args_type is typing.Dict or args_type is list:
-            result = dict()
-            for k, v in params.items():
-                key = cls.from_annotation(k, global_params, annotation[0])
-                value = cls.from_annotation(v, global_params, annotation[1])
-                result[key] = value
-            return result
-        elif args_type is typing.Tuple or args_type is tuple:
-            if len(annotation) != len(params):
+        origin = typing.get_origin(annotation)
+        args = typing.get_args(annotation)
+
+        # List[X] / list[X]
+        if origin in (list, typing.List):
+            if params is None:
+                return None
+            sub = args[0] if args else None
+            return [cls.from_annotation(p, global_params, sub) for p in params]
+
+        # Dict[K, V] / dict[K, V]
+        if origin in (dict, typing.Dict):
+            if params is None:
+                return None
+            k_anno = args[0] if len(args) >= 1 else None
+            v_anno = args[1] if len(args) >= 2 else None
+            return {
+                cls.from_annotation(k, global_params, k_anno): cls.from_annotation(v, global_params, v_anno)
+                for k, v in params.items()
+            }
+
+        # Tuple[A, B, C] / tuple[A, B, C]；要求长度严格一致（不处理 Tuple[X, ...] 变长形式）
+        if origin in (tuple, typing.Tuple):
+            if params is None:
+                return None
+            if len(args) != len(params):
                 raise AssertionError(
                     "number of params not match the annotation. "
                     "{}, annotation: {}, params: {}".format(cls, annotation, params)
                 )
-            result = list()
-            for param, sub_annotation in zip(params, annotation):
-                result.append(cls.from_annotation(param, global_params, sub_annotation))
-            return tuple(result)
-        elif args_type is typing.Union:
-            for option in annotation:
+            return tuple(
+                cls.from_annotation(p, global_params, sub_annotation)
+                for p, sub_annotation in zip(params, args)
+            )
+
+        # Union / Optional
+        if origin is typing.Union:
+            for option in args:
                 try:
-                    result = cls.from_annotation(params, global_params, option)
-                    break
+                    return cls.from_annotation(params, global_params, option)
                 except Exception:
                     continue
-            else:
-                raise ValueError("no type of Union match the params {}".format(params))
-            return result
-        elif args_type is typing.Any:
-            result = params
-            return result
+            raise ValueError("no type of Union match the params {}".format(params))
 
-        if hasattr(typing, "GenericMeta"):
-            built_in_type = typing.GenericMeta
-        elif hasattr(typing, "GenericAlias"):
-            built_in_type = typing.GenericAlias
-        else:
-            raise NotImplementedError
+        # 至此 annotation 应当是一个普通 class（非泛型）。
 
-        if not isinstance(args_type, built_in_type):
-            if hasattr(args_type, "from_json"):
-                result = args_type.from_json(params, global_params)
-            elif isinstance(args_type, tuple) and len(args_type) > 0 and isinstance(args_type[0], built_in_type):
-                # List[Dict[str, List[str]]]
-                result = cls.from_annotation(params, global_params, args_type)
-            else:
-                if isinstance(params, dict):
-                    result = args_type(**params)
-                else:
-                    result = args_type(params)
+        # NoneType（来自 Optional[X] 内部分支）
+        if annotation is type(None):
+            if params is None:
+                return None
+            raise ValueError("expected None, got {}".format(params))
 
-            return result
+        if params is None:
+            return None
 
-        raise NotImplementedError(
-            "{}, params: {}, subs_tree: {}".format(cls, params, subs_tree)
-        )
+        # Params 子类（或任何提供 from_json 的类）
+        if isinstance(annotation, type) and hasattr(annotation, "from_json"):
+            return annotation.from_json(params, global_params)
+
+        # 已经是目标类型的实例
+        if isinstance(annotation, type) and isinstance(params, annotation):
+            return params
+
+        # 基本类型 (str / int / float / bool / 自定义类...)
+        if isinstance(params, dict):
+            return annotation(**params)
+        return annotation(params)
 
 
 if __name__ == "__main__":

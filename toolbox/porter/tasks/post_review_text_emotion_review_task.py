@@ -53,11 +53,10 @@ EMOTION_SYSTEM_PROMPT = """
 class PostReviewTextEmotionReviewTask(BaseTask, TaskJsonUtils):
     def __init__(self,
                  check_interval: int,
-                 platform_to_dirs: List[Tuple[str, str]],
+                 platform_to_dirs: List[Tuple[str, str, str]],
                  key_of_llm_base_url: str = "POST_REVIEW_LLM_BASE_URL",
                  key_of_llm_api_key: str = "POST_REVIEW_LLM_API_KEY",
                  key_of_llm_model_id: str = "POST_REVIEW_LLM_MODEL_ID",
-                 **kwargs
                  ):
         super().__init__(
             flag=f"[{self.__class__.__name__}]",

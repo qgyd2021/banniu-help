@@ -3,7 +3,7 @@
     "enable": true,
     "type": "banniu_task_download",
     "project_id": "39369",
-    "check_interval": 600,
+    "check_interval": 60,
     "fetch_delay_seconds": 21600,
     "output_dir": "temp/banniu_39369/step_1_banniu_task_download/tasks",
     "last_fetch_tasks": "temp/banniu_39369/step_1_banniu_task_download/last_fetch_tasks.json",
@@ -251,6 +251,48 @@
       ["xiaoheihe", "temp/banniu_39369/step_6_post_review_submit/xiaoheihe", "temp/banniu_39369/step_7_post_review_final/xiaoheihe"],
       ["weibo", "temp/banniu_39369/step_6_post_review_submit/weibo", "temp/banniu_39369/step_7_post_review_final/weibo"],
       ["unknown", "temp/banniu_39369/step_6_post_review_submit/unknown", "temp/banniu_39369/step_7_post_review_final/unknown"]
+    ]
+  },
+  {
+    "enable": true,
+    "type": "post_review_automatic_final",
+    "check_interval": 60,
+    "platform_to_dirs": [
+      ["xiaohongshu", "temp/banniu_39369/step_5_4_post_review_image_item_review/xiaohongshu", "temp/banniu_39369/step_7_post_review_final/xiaohongshu"],
+      ["dewu", "temp/banniu_39369/step_5_4_post_review_image_item_review/dewu", "temp/banniu_39369/step_7_post_review_final/dewu"],
+      ["douyin", "temp/banniu_39369/step_5_4_post_review_image_item_review/douyin", "temp/banniu_39369/step_7_post_review_final/douyin"],
+      ["kuaishou", "temp/banniu_39369/step_5_4_post_review_image_item_review/kuaishou", "temp/banniu_39369/step_7_post_review_final/kuaishou"],
+      ["bilibili", "temp/banniu_39369/step_5_4_post_review_image_item_review/bilibili", "temp/banniu_39369/step_7_post_review_final/bilibili"],
+      ["xiaoheihe", "temp/banniu_39369/step_5_4_post_review_image_item_review/xiaoheihe", "temp/banniu_39369/step_7_post_review_final/xiaoheihe"],
+      ["weibo", "temp/banniu_39369/step_5_4_post_review_image_item_review/weibo", "temp/banniu_39369/step_7_post_review_final/weibo"],
+      ["unknown", "temp/banniu_39369/step_5_4_post_review_image_item_review/unknown", "temp/banniu_39369/step_7_post_review_final/unknown"]
+    ],
+    "post_review_checker_kwargs": {
+      "positive_emotion_labels": ["积极", "中性"],
+      "min_total_text_length": 10,
+      "required_tags_dict": {
+        "Ace68Turbo": ["迈从", "迈从Ace68Turbo"],
+        "Ace68GT": ["迈从", "迈从Ace68GT"],
+        "Ace68Air 2": ["迈从", "迈从Ace68Air2"],
+        "A7V2": ["迈从", "迈从A7V2"],
+        "Ace68V2": ["迈从", "迈从ACE68v2"],
+        "K20GT": ["迈从", "迈从K20GT"]
+      },
+      "required_image_item_dict": {
+        "Ace68Turbo":["keyboard"],
+        "Ace68GT": ["keyboard"],
+        "Ace68Air 2": ["keyboard"],
+        "A7V2": ["mouse"],
+        "Ace68V2": ["keyboard"],
+        "K20GT": []
+      },
+      "min_image_count": 1,
+      "max_image_cross_rate": 0.5,
+      "min_video_count": 1,
+      "max_video_cross_rate": 0.5
+    },
+    "post_reviewer_list": [
+      {"type": "missing_tag_only"}
     ]
   },
   {

@@ -69,7 +69,6 @@ class PostReviewRouterTask(BaseTask, TaskJsonUtils):
                  blank_dir: Optional[str],
                  unknown_dir: Optional[str],
                  share_post_url_field: str = "晒单内容链接",
-                 **kwargs
                  ):
         super().__init__(
             flag=f"[{self.__class__.__name__}]",

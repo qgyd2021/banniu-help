@@ -20,13 +20,15 @@ class PorterManager(object):
 
         coro_task_set = set()
         for task in tasks:
-            enable = task.pop("enable")
-            task_type = task.pop("type")
-
+            enable = task.get("enable", False)
             if not enable:
                 continue
-            task_cls: BaseTask = BaseTask.by_name(task_type)
-            task_obj = task_cls(**task)
+
+            # 走 BaseTask.from_json，让 platform_to_dirs / post_reviewer_list 等
+            # 嵌套类型按 Params 的 from_annotation 规则递归实例化。
+            # 直接 task_cls(**task) 会绕过这套机制，比如 List[PostReviewer] 就还是 dict 列表。
+            task_params = {k: v for k, v in task.items() if k != "enable"}
+            task_obj = BaseTask.from_json(task_params)
 
             coro_task_set.add(task_obj.start())
         return coro_task_set

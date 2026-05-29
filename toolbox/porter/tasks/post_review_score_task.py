@@ -7,10 +7,14 @@ import tempfile
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
+from toolbox.porter.common.params import Params
+
 logger = logging.getLogger("toolbox")
 
 from toolbox.porter.tasks.base_task import BaseTask, TaskJsonUtils
 from toolbox.porter.entity.post_review import PostReview, PostReviewFinal
+from toolbox.porter.entity.banniu_task import BanniuTaskFormatted
+from toolbox.porter.tasks.utils.post_review import PostReviewChecker, PostReviewCheckerResult, PostReviewer
 
 
 def _build_score_rejection_reply(
@@ -52,7 +56,7 @@ def _build_score_rejection_reply(
     return "；".join(parts) if parts else "内容暂未达到活动要求，请核对后重新提交。"
 
 
-@BaseTask.register("post_review_score")
+@BaseTask.register("post_review_score", exist_ok=True)
 class PostReviewScoreTask(BaseTask, TaskJsonUtils):
     def __init__(
         self,
@@ -65,7 +69,6 @@ class PostReviewScoreTask(BaseTask, TaskJsonUtils):
         max_image_cross_rate: float = 0.0,
         min_video_count: int = 0,
         max_video_cross_rate: float = 0.0,
-        **kwargs,
     ):
         super().__init__(flag=f"[{self.__class__.__name__}]", check_interval=check_interval)
 
@@ -176,13 +179,12 @@ class PostReviewScoreTask(BaseTask, TaskJsonUtils):
                 )
 
 
-@BaseTask.register("post_review_only_final")
+@BaseTask.register("post_review_only_final", exist_ok=True)
 class PostReviewOnlyFinal(BaseTask, TaskJsonUtils):
     def __init__(
         self,
         check_interval: int,
         platform_to_dirs: List[Tuple[str, str, str]],
-        **kwargs,
     ):
         super().__init__(flag=f"[{self.__class__.__name__}]", check_interval=check_interval)
 
@@ -214,14 +216,80 @@ class PostReviewOnlyFinal(BaseTask, TaskJsonUtils):
                     continue
 
                 post_review_final = PostReviewFinal.from_dict(post_review.review_final.model_dump())
-                if post_review_final.approved:
-                    post_review_final.approved_in_str = "已通过"
-                elif not post_review_final.approved:
-                    post_review_final.approved_in_str = "未通过"
-                else:
-                    logger.info(f"{self.flag} 此任务只处理带有人工终审的Task，跳过: platform={platform}, source={source_dir.as_posix()}")
+                post_review_final.approved_in_str = PostReviewFinal.get_approved_in_str(post_review_final.approved)
+                post_review_final.reviewer = "人工终审"
+
+                dst = target_dir / src.name
+                self.safe_move(src, dst)
+                await self.append_kv_to_task_file(
+                    dst,
+                    kv={
+                        "post_review_final": post_review_final.to_dict(),
+                    },
+                )
+
+
+@BaseTask.register("post_review_automatic_final", exist_ok=True)
+class PostReviewAutomaticFinal(BaseTask, TaskJsonUtils):
+    def __init__(self,
+                 check_interval: int,
+                 platform_to_dirs: List[Tuple[str, str, str]],
+                 post_review_checker_kwargs: Dict[str, Any],
+                 post_reviewer_list: List[PostReviewer],
+                 ):
+        super().__init__(flag=f"[{self.__class__.__name__}]", check_interval=check_interval)
+
+        self.platform_to_dir: List[Tuple[str, Path, Path]] = []
+        for platform, src, dst in platform_to_dirs:
+            p = str(platform).strip().lower()
+            src_dir = self.resolve_project_path(src)
+            dst_dir = self.resolve_project_path(dst)
+            self.platform_to_dir.append((p, src_dir, dst_dir))
+
+        self.post_review_checker_kwargs = post_review_checker_kwargs or {}
+        self.post_review_checker = PostReviewChecker(
+            **self.post_review_checker_kwargs
+        )
+        self.post_reviewer_list = post_reviewer_list
+
+    async def do_task(self):
+        if not self.platform_to_dir:
+            logger.info(f"{self.flag} platform_to_dirs 为空，跳过")
+            return
+
+        for platform, source_dir, target_dir in self.platform_to_dir:
+            if not source_dir.exists():
+                logger.info(f"{self.flag} 源目录不存在，跳过: platform={platform}, source={source_dir.as_posix()}")
+                continue
+            target_dir.mkdir(parents=True, exist_ok=True)
+
+            files = self.pick_task_files(source_dir, recursive=False)
+            for src in files:
+                payload: dict = await self.load_json_file(src)
+                task_formatted = BanniuTaskFormatted.from_dict(payload.get("task_formatted", dict()))
+                post_review = PostReview.from_dict(payload.get("post_review", dict()))
+
+                if post_review.review_final.approved is not None:
+                    logger.info(f"{self.flag} 人工终审已完成，无需自动审核，跳过: platform={platform}, source={source_dir.as_posix()}")
                     continue
 
+                # 检查
+                post_review_checker_result: PostReviewCheckerResult = self.post_review_checker.predict(post_review, task_formatted)
+
+                # 自动审核
+                post_review_final: PostReviewFinal = None
+                for reviewer in self.post_reviewer_list:
+                    post_review_final = reviewer.process(post_review_checker_result)
+                    if post_review_final is not None:
+                        break
+
+                if post_review_final is None:
+                    logger.info(f"{self.flag} 自动审核未命中，跳过: platform={platform}, source={source_dir.as_posix()}")
+                    continue
+
+                logger.info(f"{self.flag} 自动审核: platform={platform}, source={source_dir.as_posix()}")
+                # TODO: 选设置60秒审一个，控制频率，等后续感觉没问题了，再放开。
+                await asyncio.sleep(60)
                 dst = target_dir / src.name
                 self.safe_move(src, dst)
                 await self.append_kv_to_task_file(
@@ -260,5 +328,119 @@ async def main() -> None:
     await task.do_task()
 
 
+async def main2():
+
+    js = {
+        "type": "post_review_automatic_final",
+        "check_interval": 60,
+        "platform_to_dirs": [
+            [
+                "xiaohongshu",
+                "temp/banniu_39369/step_5_4_post_review_image_item_review/xiaohongshu",
+                "temp/banniu_39369/step_7_post_review_final/xiaohongshu"
+            ],
+            [
+                "dewu",
+                "temp/banniu_39369/step_5_4_post_review_image_item_review/dewu",
+                "temp/banniu_39369/step_7_post_review_final/dewu"
+            ],
+            [
+                "douyin",
+                "temp/banniu_39369/step_5_4_post_review_image_item_review/douyin",
+                "temp/banniu_39369/step_7_post_review_final/douyin"
+            ],
+            [
+                "kuaishou",
+                "temp/banniu_39369/step_5_4_post_review_image_item_review/kuaishou",
+                "temp/banniu_39369/step_7_post_review_final/kuaishou"
+            ],
+            [
+                "bilibili",
+                "temp/banniu_39369/step_5_4_post_review_image_item_review/bilibili",
+                "temp/banniu_39369/step_7_post_review_final/bilibili"
+            ],
+            [
+                "xiaoheihe",
+                "temp/banniu_39369/step_5_4_post_review_image_item_review/xiaoheihe",
+                "temp/banniu_39369/step_7_post_review_final/xiaoheihe"
+            ],
+            [
+                "weibo",
+                "temp/banniu_39369/step_5_4_post_review_image_item_review/weibo",
+                "temp/banniu_39369/step_7_post_review_final/weibo"
+            ],
+            [
+                "unknown",
+                "temp/banniu_39369/step_5_4_post_review_image_item_review/unknown",
+                "temp/banniu_39369/step_7_post_review_final/unknown"
+            ]
+        ],
+        "post_review_checker_kwargs": {
+            "positive_emotion_labels": [
+                "积极",
+                "中性"
+            ],
+            "min_total_text_length": 10,
+            "required_tags_dict": {
+                "Ace68Turbo": [
+                    "迈从",
+                    "迈从Ace68Turbo"
+                ],
+                "Ace68GT": [
+                    "迈从",
+                    "迈从Ace68GT"
+                ],
+                "Ace68Air 2": [
+                    "迈从",
+                    "迈从Ace68Air2"
+                ],
+                "A7V2": [
+                    "迈从",
+                    "迈从A7V2"
+                ],
+                "Ace68V2": [
+                    "迈从",
+                    "迈从ACE68v2"
+                ],
+                "K20GT": [
+                    "迈从",
+                    "迈从K20GT"
+                ]
+            },
+            "required_image_item_dict": {
+                "Ace68Turbo": [
+                    "keyboard"
+                ],
+                "Ace68GT": [
+                    "keyboard"
+                ],
+                "Ace68Air 2": [
+                    "keyboard"
+                ],
+                "A7V2": [
+                    "mouse"
+                ],
+                "Ace68V2": [
+                    "keyboard"
+                ],
+                "K20GT": []
+            },
+            "min_image_count": 1,
+            "max_image_cross_rate": 0.5,
+            "min_video_count": 1,
+            "max_video_cross_rate": 0.5
+        },
+        "post_reviewer_list": [
+            {
+                "type": "missing_tag_only"
+            }
+        ]
+    }
+    task = BaseTask.from_json(js)
+    print(task)
+    return
+
+
 if __name__ == "__main__":
-    asyncio.run(main())
+    # asyncio.run(main())
+    asyncio.run(main2())

@@ -32,7 +32,7 @@ class PostReviewImageItemReviewTask(BaseTask, TaskJsonUtils):
     def __init__(self,
                  check_interval: int,
                  platform_to_dirs: List[Tuple[str, str, str]],
-                 **kwargs):
+                 ):
         super().__init__(
             flag=f"[{self.__class__.__name__}]",
             check_interval=check_interval,

@@ -24,7 +24,6 @@ class PostReviewDuplicateReviewTask(BaseTask, TaskJsonUtils):
         check_interval: int,
         platform_to_dirs: List[Tuple[str, str, str]],
         post_duplicate_file: str,
-        **kwargs,
     ):
         super().__init__(flag=f"[{self.__class__.__name__}]", check_interval=check_interval)
         self.platform_to_dir = list()
@@ -83,6 +82,7 @@ class PostReviewDuplicateReviewTask(BaseTask, TaskJsonUtils):
         value = copy.deepcopy(value)
         value.discard(task_id)
         self.author_id_to_task_ids[key].add(task_id)
+        # TODO: 需要检测这些被判断为重复的 task_id 在班牛的状态是否处于 “等审核” 状态，否则不算重复。因为用户的贴子可能被驳回，用户修改后又重新提交活动登记。
         return value
 
     async def do_task(self):

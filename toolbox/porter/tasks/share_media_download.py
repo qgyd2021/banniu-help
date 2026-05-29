@@ -47,7 +47,6 @@ class ShareMediaDownloadTaskBase(BaseTask, TaskJsonUtils):
         source_dir: str,
         output_dir: str = None,
         share_post_url_field: str = "晒单内容链接",
-        **kwargs,
     ):
         super().__init__(flag=f"[{self.__class__.__name__}]", check_interval=check_interval)
         self.source_dir = self.resolve_project_path(source_dir)

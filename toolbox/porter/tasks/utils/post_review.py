@@ -1,10 +1,52 @@
 #!/usr/bin/python3
 # -*- coding: utf-8 -*-
 import json
-from typing import Dict, List, Tuple, Optional
+
+from pandas._libs.hashtable import Factorizer
+from pydantic import BaseModel, ConfigDict, Field
+from typing import Any, Dict, List, Tuple, Optional
 
 from toolbox.porter.entity.banniu_task import BanniuTaskFormatted
-from toolbox.porter.entity.post_review import PostReview
+from toolbox.porter.entity.post_review import PostReview, PostReviewFinal
+from toolbox.porter.common.params import Params
+
+
+class PostReviewCheckerReviewMessage(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    product_model: Optional[str] = Field(default=None, description="产品型号与订单信息不匹配")
+    review_duplicate: Optional[str] = Field(default=None, description="贴子重复")
+    emotion_label: Optional[str] = Field(default=None, description="情绪标签")
+    text_length: Optional[str] = Field(default=None, description="字数")
+    tags_miss: Optional[str] = Field(default=None, description="缺少标签")
+    image_item_miss: Optional[str] = Field(default=None, description="图片物品检测")
+    min_image_count: Optional[str] = Field(default=None, description="最小图片数")
+    min_video_count: Optional[str] = Field(default=None, description="最小视频数")
+    image_and_video: Optional[str] = Field(default=None, description="图片或视频必须有")
+    max_image_cross_rate: Optional[str] = Field(default=None, description="太多图片不符合")
+    max_video_cross_rate: Optional[str] = Field(default=None, description="太多视频不符合")
+    review_final: Optional[str] = Field(default=None, description="人工审核结果")
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "PostReviewCheckerResult":
+        return cls.model_validate(data or {})
+
+    def to_dict(self) -> Dict[str, Any]:
+        return self.model_dump(exclude_none=True)
+
+
+class PostReviewCheckerResult(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    approval: bool = Field(default=None, description="审核是否通过")
+    review_msg: PostReviewCheckerReviewMessage = Field(default_factory=PostReviewCheckerReviewMessage, description="审核信息")
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "PostReviewCheckerResult":
+        return cls.model_validate(data or {})
+
+    def to_dict(self) -> Dict[str, Any]:
+        return self.model_dump(exclude_none=True)
 
 
 class PostReviewChecker(object):
@@ -18,7 +60,6 @@ class PostReviewChecker(object):
         max_image_cross_rate: float = 0.0,
         min_video_count: int = 0,
         max_video_cross_rate: float = 0.0,
-        **kwargs,
     ):
         self.positive_emotion_labels = positive_emotion_labels or ["积极"]
         self.min_total_text_length = int(min_total_text_length)
@@ -29,34 +70,35 @@ class PostReviewChecker(object):
         self.min_video_count = int(min_video_count)
         self.max_video_cross_rate = float(max_video_cross_rate)
 
-    def predict(self, post_review: PostReview, task_formatted: BanniuTaskFormatted) -> dict:
+    def predict(self, post_review: PostReview, task_formatted: BanniuTaskFormatted) -> PostReviewCheckerResult:
         product_model = task_formatted.product_model
 
-        review_msg = dict()
+        result = PostReviewCheckerResult()
+
         #旺店通-商家编号
         merchant_id = task_formatted.purchase_info_dict.get("39400", "")
         if product_model not in merchant_id:
-            review_msg["product_model"] = f"用户给的产品型号与订单信息不匹配。{product_model}，{merchant_id}"
+            result.review_msg.product_model = f"用户给的产品型号与订单信息不匹配。{product_model}，{merchant_id}"
 
         duplicate_task_ids = post_review.review_duplicate.duplicate_task_ids or []
         if len(duplicate_task_ids) > 0:
-            review_msg["review_duplicate"] = f"重复提交；重复ID：{'，'.join(duplicate_task_ids)}。"
+            result.review_msg.review_duplicate = f"重复提交；重复ID：{'，'.join(duplicate_task_ids)}。"
 
         emotion_label = post_review.review_text.emotion_label
         if emotion_label not in self.positive_emotion_labels:
-            review_msg["emotion_label"] = f"贴子应为正向积极的内容；当前情绪：{emotion_label}。"
+            result.review_msg.emotion_label = f"贴子应为正向积极的内容；当前情绪：{emotion_label}。"
 
         title_length = post_review.review_text.title_length
         desc_length = post_review.review_text.desc_length
         total_length = title_length + desc_length
         if total_length < self.min_total_text_length:
-            review_msg["text_length"] = f"标题和描述的总字数太少；总长度：{total_length}，最小长应：{self.min_total_text_length}。"
+            result.review_msg.text_length = f"标题和描述的总字数太少；总长度：{total_length}，最小长应：{self.min_total_text_length}。"
 
         tags_match = post_review.review_text.tags_match or []
         required_tags = self.required_tags_dict.get(product_model, [])
         tags_miss = [tag for tag in required_tags if tag not in tags_match]
         if len(tags_miss) > 0:
-            review_msg["tags_miss"] = f"缺少标签：{'，'.join(tags_miss)}。"
+            result.review_msg.tags_miss = f"缺少标签：{'，'.join(tags_miss)}。"
 
         image_total = post_review.review_image.total_count
         image_cross = post_review.review_image.cross_count
@@ -74,32 +116,76 @@ class PostReviewChecker(object):
                         image_item_match.append(k)
             image_item_miss = [image_item for image_item in required_image_items if image_item not in image_item_match]
             if len(image_item_miss) > 0:
-                review_msg["image_item_miss"] = f"未从图片中检测到物品：{'，'.join(image_item_miss)}。"
+                result.review_msg.image_item_miss = f"未从图片中检测到物品：{'，'.join(image_item_miss)}。"
 
         if video_total <= 0 and image_total < self.min_image_count:
-            review_msg["min_image_count"] = f"图片太少；当前图片数量: {image_total}。"
+            result.review_msg.min_image_count = f"图片太少；当前图片数量: {image_total}。"
         if image_total <= 0 and video_total < self.min_video_count:
-            review_msg["min_video_count"] = f"视频太少；当前视频数量: {video_total}。"
+            result.review_msg.min_video_count = f"视频太少；当前视频数量: {video_total}。"
         if image_total <= 0 and video_total <= 0:
-            review_msg["image_and_video"] = "必须要有图片或视频。"
+            result.review_msg.image_and_video = "必须要有图片或视频。"
 
         if image_total > 0:
             image_cross_rate = image_cross / image_total
             if image_cross_rate > self.max_image_cross_rate:
-                review_msg["max_image_cross_rate"] = f"太多不符合的图片；图片总数: {image_total}，不符合的图片数：{image_cross}。"
+                result.review_msg.max_image_cross_rate = f"太多不符合的图片；图片总数: {image_total}，不符合的图片数：{image_cross}。"
 
         if video_total > 0:
             video_cross_rate = video_cross / video_total
             if video_cross_rate > self.max_video_cross_rate:
-                review_msg["max_video_cross_rate"] = f"太多不符合的视频；视频总数: {video_total}，不符合的视频数：{video_cross}。"
+                result.review_msg.max_video_cross_rate = f"太多不符合的视频；视频总数: {video_total}，不符合的视频数：{video_cross}。"
 
         if post_review.review_final.approved is False:
-            review_msg["review_final"] = f"人工已审核为不通过；{post_review.review_final.reply_to_user}。"
+            result.review_msg.review_final = f"人工已审核为不通过；{post_review.review_final.reply_to_user}。"
 
-        result = dict()
-        result["approval"] = len(review_msg) == 0
-        result["review_msg"] = review_msg
+        # ``approval`` 反映 "自动审核是否会通过"，纯看自动检测项，不让 ``review_final``
+        # （人工已审核状态）这条参考信息干扰判定，避免出现 "人工已审核为通过" 时
+        # 自动预测反而显示 "将不通过" 的反直觉情况。
+        review_msg_for_approval = result.review_msg.to_dict()
+        review_msg_for_approval.pop("review_final", None)
+        result.approval = len(review_msg_for_approval) == 0
         return result
+
+
+class PostReviewer(Params):
+    def process(self, post_review_checker_result: PostReviewCheckerResult) -> PostReviewFinal:
+        raise NotImplementedError
+
+
+@PostReviewer.register("missing_tag_only")
+class PostReviewerMissingTagOnly(PostReviewer):
+    def __init__(self):
+        pass
+
+    def process(self, post_review_checker_result: PostReviewCheckerResult) -> PostReviewFinal:
+        """
+        当贴子的问题项有且只有 `缺少标签` 时。进行驳回。
+
+        自动审稿时
+        """
+        if post_review_checker_result.approval:
+            return None
+
+        review_msg = post_review_checker_result.review_msg.to_dict()
+
+        # 自动审稿时不考虑图片数量与是否符合的问题。
+        review_msg.pop("min_image_count", None)
+        review_msg.pop("min_video_count", None)
+        review_msg.pop("image_and_video", None)
+
+        # print(f"review_msg: {json.dumps(review_msg, ensure_ascii=False, indent=4)}")
+        if len(review_msg) != 1:
+            return None
+        tags_miss = review_msg.get("tags_miss")
+        if tags_miss is None:
+            return None
+
+        post_review_final = PostReviewFinal()
+        post_review_final.reviewer = "missing_tag_only"
+        post_review_final.approved = False
+        post_review_final.approved_in_str = PostReviewFinal.get_approved_in_str(post_review_final.approved)
+        post_review_final.reply_to_user = f"{tags_miss} 修改后可联系客服重新修改审核。"
+        return post_review_final
 
 
 def main():

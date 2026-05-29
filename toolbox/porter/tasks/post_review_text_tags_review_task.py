@@ -26,7 +26,6 @@ class PostReviewTextTagsReviewTask(BaseTask, TaskJsonUtils):
         check_interval: int,
         platform_to_dirs: List[Tuple[str, str, str]],
         tags_config: Dict[str, Dict[str, List[str]]] = None,
-        **kwargs,
     ):
         super().__init__(flag=f"[{self.__class__.__name__}]", check_interval=check_interval)
         self.platform_to_dir = list()

@@ -76,6 +76,7 @@ class PostReviewFinal(BaseModel):
     approved: Optional[bool] = Field(default=None, description="是否审核通过,为None时表示尚未决策。")
     approved_in_str: str = Field(default=None, description="是否审核通过, 字符类型，可选值：待审核，已通过，未通过。")
     reply_to_user: str = Field(default="", description="给用户的回复。")
+    reviewer: str = Field(default="人工审核", description="审核者标识")
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "PostReviewFinal":
@@ -83,6 +84,14 @@ class PostReviewFinal(BaseModel):
 
     def to_dict(self) -> Dict[str, Any]:
         return self.model_dump()
+
+    @staticmethod
+    def get_approved_in_str(approved: bool) -> str:
+        if approved:
+            approved_in_str = "已通过"
+        else:
+            approved_in_str = "未通过"
+        return approved_in_str
 
 
 def main() -> None:
