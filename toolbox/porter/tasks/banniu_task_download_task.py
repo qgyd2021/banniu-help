@@ -20,8 +20,8 @@ from toolbox.banniu.form.task_list import TaskListForm
 from toolbox.asyncio.cacheout import async_cache_decorator
 
 
-@BaseTask.register("banniu_task_download")
-class BanNiuTaskDownloadTask(BaseTask):
+@BaseTask.register("banniu_pending_review_task_download")
+class BanNiuPendingReviewTaskDownloadTask(BaseTask):
     def __init__(self,
                  project_id: str,
                  check_interval: int,
@@ -253,7 +253,6 @@ class BanNiuTaskDownloadTask(BaseTask):
             logger.info(f"{self.flag}未拉取到任务数据。")
             return
 
-        task_ids_seen = await self.load_dedupe_task_id_set()
         new_ids: List[str] = []
         new_count = 0
         for raw_row in raw_rows:
@@ -271,7 +270,6 @@ class BanNiuTaskDownloadTask(BaseTask):
                 window_start=star_created,
                 window_end=end_created,
             )
-            task_ids_seen.add(task_id)
             new_ids.append(task_id)
             new_count += 1
             logger.info(f"{self.flag}新增任务 task_id={task_id}")
@@ -281,13 +279,144 @@ class BanNiuTaskDownloadTask(BaseTask):
         logger.info(f"{self.flag}本轮拉取 {len(raw_rows)} 条，新增 {new_count} 条。")
 
 
+@BaseTask.register("banniu_retrial_task_download")
+class BanNiuRetrialTaskDownloadTask(BaseTask):
+    def __init__(self,
+                 project_id: str,
+                 check_interval: int,
+                 key_of_app_key: str = "BANNIU_APP_KEY",
+                 key_of_app_secret: str = "BANNIU_APP_SECRET",
+                 key_of_access_token: str = "BANNIU_ACCESS_TOKEN",
+                 output_dir: str = "banniu_task_download/tasks",
+                 ):
+        super().__init__(
+            flag=f"[{self.__class__.__name__}_ProjectId_{project_id}]",
+            check_interval=check_interval
+        )
+        self.time_zone_info = ZoneInfo(time_zone_info)
+
+        self.project_id = str(project_id)
+        if not os.path.isabs(output_dir):
+            self.output_dir = project_path / output_dir
+        else:
+            self.output_dir = Path(output_dir)
+        app_key = environment.get(key_of_app_key)
+        app_secret = environment.get(key_of_app_secret)
+        access_token = environment.get(key_of_access_token)
+        self.banniu_client = AsyncBanNiuClient(
+            app_key=app_key,
+            app_secret=app_secret,
+            access_token=access_token,
+        )
+
+    async def fetch_column_form(self) -> ColumnListForm:
+        js = await self.banniu_client.column_list(project_id=self.project_id)
+        rows = (((js or {}).get("response") or {}).get("map") or {}).get("result") or []
+        form = ColumnListForm(rows=rows if isinstance(rows, list) else [])
+        return form
+
+    async def fetch_retrial_task_rows(self):
+        page_size = 50
+        # 任务状态; task_status: 0, 待处理; 1, 已完成; 2, 处理中; 3, 暂停中; 4, 已关闭
+        # task_status = 0 # 待处理
+        # task_status = 2 # 处理中
+        # task_status = None
+        condition_column = [
+            {
+                "字段": "是否修改内容",
+                "字段类型": "文本类型",
+                "搜索类型": "等于",
+                "搜索内容": "是",
+                # "搜索内容": "否",
+            }
+        ]
+        all_rows: List[dict] = []
+        for task_status in (0, 2):
+            page_num = 1
+            while True:
+                js = await self.banniu_client.task_list_pretty(
+                    project_id=self.project_id,
+                    page_size=page_size,
+                    page_num=page_num,
+                    task_status=task_status,
+                    condition_column=condition_column,
+                )
+                rows = js["response"]["map"]["result"]
+                print(f"rows: {rows}")
+                form = TaskListForm(raw_rows=rows if isinstance(rows, list) else [])
+                page_rows = form.raw_rows
+                if not page_rows:
+                    break
+                all_rows.extend(page_rows)
+                if len(page_rows) < page_size:
+                    break
+                page_num += 1
+                if page_num > 200:
+                    logger.warning(f"{self.flag}分页超过200页，提前停止。")
+                    break
+        return all_rows
+
+    @staticmethod
+    def convert_task_row(raw_row: dict, column_form: ColumnListForm) -> dict:
+        if not isinstance(raw_row, dict):
+            return {}
+        task_form = TaskListForm(raw_rows=[raw_row])
+        pretty_rows = task_form.get_pretty_rows(column_form=column_form)
+        if not pretty_rows:
+            return {}
+        return pretty_rows[0]
+
+    async def save_task_row_as_json_file(self, task_id: str, task_raw: dict, task_formatted: dict, **kwargs) -> str:
+        self.output_dir.mkdir(parents=True, exist_ok=True)
+        filename = self.output_dir / f"{task_id}.json"
+        payload = {
+            "task_id": task_id,
+            "updated_at": datetime.now(self.time_zone_info).strftime("%Y-%m-%d %H:%M:%S"),
+            "task_raw": task_raw,
+            "task_formatted": task_formatted,
+            **kwargs,
+        }
+        file_lock = global_file_lock_dict[filename.as_posix()]
+        async with file_lock:
+            async with aiofiles.open(filename.as_posix(), "w", encoding="utf-8") as f:
+                await f.write(json.dumps(payload, ensure_ascii=False, indent=2) + "\n")
+        return filename.as_posix()
+
+    async def do_task(self):
+        print(f"do_task")
+        column_form = await self.fetch_column_form()
+        print(f"column_form: {column_form}")
+        raw_rows = await self.fetch_retrial_task_rows()
+        print(f"raw_rows: {raw_rows}")
+        if not raw_rows:
+            logger.info(f"{self.flag}未拉取到任务数据。")
+            return
+
+        new_ids: List[str] = []
+        new_count = 0
+        for raw_row in raw_rows:
+            task_id = TaskListForm.get_task_id(raw_row)
+            if task_id is None:
+                continue
+            formatted = self.convert_task_row(raw_row, column_form)
+            await self.save_task_row_as_json_file(
+                task_id=task_id,
+                task_raw=raw_row,
+                task_formatted=formatted,
+            )
+            new_ids.append(task_id)
+            new_count += 1
+            logger.info(f"{self.flag}新增任务 task_id={task_id}")
+        logger.info(f"{self.flag}本轮拉取 {len(raw_rows)} 条，新增 {new_count} 条。")
+
+
 def main():
     import log
     from project_settings import log_directory
 
     log.setup_size_rotating(log_directory=log_directory)
 
-    task = BanNiuTaskDownloadTask(
+    task = BanNiuPendingReviewTaskDownloadTask(
         project_id="39369",
         check_interval=60,
         output_dir="temp/banniu_39369/step_1_banniu_task_download/tasks",

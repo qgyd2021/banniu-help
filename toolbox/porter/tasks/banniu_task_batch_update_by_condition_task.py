@@ -15,17 +15,21 @@ logger = logging.getLogger("toolbox")
 
 from project_settings import environment, project_path
 from toolbox.porter.tasks.base_task import BaseTask, TaskJsonUtils
-from toolbox.banniu.restful.banniu_client import AsyncBanNiuRestfulClient
+from toolbox.banniu.sdk.banniu_client import AsyncBanNiuClient
 from toolbox.banniu.form.column_list import ColumnListForm
 
 
-@BaseTask.register("banniu_task_batch_update")
-class BanNiuTaskBatchUpdateTask(BaseTask, TaskJsonUtils):
+@BaseTask.register("banniu_task_batch_update_by_condition")
+class BanNiuTaskBatchUpdateByConditionTask(BaseTask, TaskJsonUtils):
 
     # column_name_to_key 的 value 支持 Jinja2 模板（默认 {{ ... }} 占位符），
     # 例如 "{{ post_review_final.approved_in_str }}" 或
     # "当前审核状态：{{ post_review_final.approved_in_str }}"。
     _jinja_env = Environment(autoescape=False, undefined=StrictUndefined)
+
+    # task.list 单页规模与分页兜底
+    _LIST_PAGE_SIZE = 100
+    _LIST_MAX_PAGES = 1000
 
     def __init__(
         self,
@@ -34,6 +38,7 @@ class BanNiuTaskBatchUpdateTask(BaseTask, TaskJsonUtils):
         check_interval: int,
         platform_to_dirs: List[Tuple[str, str, str]],
         column_name_to_key: Dict[str, str],
+        condition_column: list = None,
         batch_size: int = 200,
         key_of_app_key: str = "BANNIU_APP_KEY",
         key_of_app_secret: str = "BANNIU_APP_SECRET",
@@ -45,10 +50,11 @@ class BanNiuTaskBatchUpdateTask(BaseTask, TaskJsonUtils):
         )
         self.project_id = str(project_id)
         self.app_id = str(app_id)
-        self.column_name_to_key = dict(column_name_to_key or {})
+        self.column_name_to_key = column_name_to_key or dict()
+        self.condition_column = condition_column or list()
         self.batch_size = max(1, min(200, int(batch_size)))
 
-        self.platform_to_dir: List[Tuple[str, Path, Path]] = []
+        self.platform_to_dir: List[Tuple[str, Path, Path]] = list()
         for platform, src, dst in platform_to_dirs:
             p = str(platform).strip().lower()
             if not os.path.isabs(src):
@@ -64,14 +70,10 @@ class BanNiuTaskBatchUpdateTask(BaseTask, TaskJsonUtils):
         app_key = environment.get(key_of_app_key)
         app_secret = environment.get(key_of_app_secret)
         access_token = environment.get(key_of_access_token)
-        self.banniu_client = AsyncBanNiuRestfulClient(app_key=app_key, app_secret=app_secret, access_token=access_token)
+        self.banniu_client = AsyncBanNiuClient(app_key=app_key, app_secret=app_secret, access_token=access_token)
 
     async def get_column_form(self) -> ColumnListForm:
-        js = await self.banniu_client.column_list(project_id=self.project_id)
-        rows = js["response"]["map"]["result"]
-        column_form = ColumnListForm(rows=rows if isinstance(rows, list) else [])
-        _ = column_form.name_to_id
-        return column_form
+        return await self.banniu_client.build_form(project_id=self.project_id)
 
     @staticmethod
     def parse_success_task_ids(batch_resp: dict) -> Set[str]:
@@ -87,6 +89,49 @@ class BanNiuTaskBatchUpdateTask(BaseTask, TaskJsonUtils):
                     success_ids.add(match.group(1))
                     break
         return success_ids
+
+    @staticmethod
+    def _condition_with_task_ids(condition_column: List[dict], task_ids: List[str]) -> List[dict]:
+        """在用户提供的中文 condition 前面叠加一条 taskId(int) 包含任一项 的过滤条件。"""
+        extra = {
+            "字段": "taskId(int)",
+            "字段类型": "数值类型",
+            "搜索类型": "包含任一项",
+            "搜索内容": [str(t) for t in task_ids],
+        }
+        return [extra] + list(condition_column)
+
+    async def _query_allowed_task_ids(self, condition_column: List[dict]) -> Optional[Set[str]]:
+        matched: Set[str] = set()
+        page_num = 1
+        while page_num <= self._LIST_MAX_PAGES:
+            try:
+                resp = await self.banniu_client.task_list_pretty(
+                    project_id=self.project_id,
+                    page_size=self._LIST_PAGE_SIZE,
+                    page_num=page_num,
+                    condition_column=condition_column,
+                )
+            except Exception as e:
+                logger.error(
+                    f"{self.flag}task.list 查询失败 page_num={page_num}, "
+                    f"condition={json.dumps(condition_column, ensure_ascii=False)}, err={e}"
+                )
+                return None
+            raw = (resp.get("response") or {}).get("map", {}).get("result")
+            rows = raw if isinstance(raw, list) else []
+            for row in rows:
+                if not isinstance(row, dict):
+                    continue
+                tid = row.get("-1") if row.get("-1") not in (None, "") else row.get("0")
+                if tid not in (None, ""):
+                    matched.add(str(tid))
+            if len(rows) < self._LIST_PAGE_SIZE:
+                break
+            page_num += 1
+        else:
+            logger.warning(f"{self.flag}task.list 分页超出上限 {self._LIST_MAX_PAGES}，提前停止")
+        return matched
 
     def build_contents(self, payload: dict, column_form: ColumnListForm) -> Dict[str, str]:
         contents: Dict[str, str] = {}
@@ -116,7 +161,6 @@ class BanNiuTaskBatchUpdateTask(BaseTask, TaskJsonUtils):
             logger.error(f"{self.flag}column_list 解析为空，project_id={self.project_id}")
             return
 
-        ok, skip, fail, scanned = 0, 0, 0, 0
         for platform, source_dir, target_dir in self.platform_to_dir:
             if not source_dir.exists():
                 logger.info(f"{self.flag}源目录不存在，跳过: platform={platform}, source={source_dir.as_posix()}")
@@ -126,17 +170,14 @@ class BanNiuTaskBatchUpdateTask(BaseTask, TaskJsonUtils):
 
             candidates: List[Dict[str, object]] = []
             for fp in files:
-                scanned += 1
                 payload = await self.load_json_file(fp)
                 if payload is None:
-                    fail += 1
                     continue
                 task_id = payload["task_id"]
 
                 contents = self.build_contents(payload=payload, column_form=column_form)
                 if not contents:
                     logger.warning(f"{self.flag}未生成任何可更新字段，跳过: {fp.name}, platform={platform}")
-                    skip += 1
                     continue
                 candidates.append(
                     {
@@ -154,6 +195,27 @@ class BanNiuTaskBatchUpdateTask(BaseTask, TaskJsonUtils):
 
             for i in range(0, len(candidates), self.batch_size):
                 chunk = candidates[i : i + self.batch_size]
+
+                # 每批将 task_id 注入 condition，向班牛验证；查不到的不允许更新
+                if self.condition_column:
+                    task_ids_in_chunk = [str(item["task_id"]) for item in chunk]
+                    condition_column = self._condition_with_task_ids(
+                        self.condition_column, task_ids_in_chunk
+                    )
+                    allowed: Set[str] = await self._query_allowed_task_ids(condition_column)
+                    if allowed is None:
+                        logger.error(f"{self.flag}班牛条件查询失败，本批跳过: platform={platform}, size={len(chunk)}")
+                        continue
+                    filtered_chunk: List[Dict[str, object]] = []
+                    for item in chunk:
+                        if str(item["task_id"]) in allowed:
+                            filtered_chunk.append(item)
+                        else:
+                            logger.info(f"{self.flag}班牛条件未命中，跳过: task_id={item['task_id']}, platform={platform}")
+                    if not filtered_chunk:
+                        continue
+                    chunk = filtered_chunk
+
                 data = [
                     {
                         "project_id": self.project_id,
@@ -168,7 +230,6 @@ class BanNiuTaskBatchUpdateTask(BaseTask, TaskJsonUtils):
                     resp = await self.banniu_client.task_batch_update(data=data)
                 except Exception as e:
                     logger.error(f"{self.flag}task_batch_update 异常: platform={platform}, size={len(chunk)}, err={e}")
-                    fail += len(chunk)
                     continue
 
                 success_task_ids = self.parse_success_task_ids(resp)
@@ -180,16 +241,12 @@ class BanNiuTaskBatchUpdateTask(BaseTask, TaskJsonUtils):
                     contents: dict = item["contents"]
                     dst_dir: Path = item["target_dir"]
                     if task_id not in success_task_ids:
-                        fail += 1
                         continue
                     final = self.safe_move(fp, dst_dir / fp.name)
-                    ok += 1
                     logger.info(
                         f"{self.flag}批量回写成功并流转: task_id={task_id}, platform={item['platform']}, "
                         f"-> {final.as_posix()}, column_ids={list(contents.keys())}"
                     )
-
-        logger.info(f"{self.flag}本轮扫描 {scanned} 个文件，完成 ok={ok}, skip={skip}, fail={fail}")
 
 
 def main():
@@ -198,7 +255,7 @@ def main():
 
     log.setup_size_rotating(log_directory=log_directory)
 
-    task = BanNiuTaskBatchUpdateTask(
+    task = BanNiuTaskBatchUpdateByConditionTask(
         project_id="39369",
         app_id="41339",
         check_interval=60,
@@ -210,6 +267,17 @@ def main():
             "审核状态": "{{ post_review_final.approved_in_str }}",
             "审核不通过原因": "{{ post_review_final.reply_to_user }}",
         },
+        condition_column=[
+            {
+                "字段": "审核状态",
+                "字段类型": "文本类型",
+                "搜索类型": "包含任一项",
+                "搜索内容": [
+                    "待审核",
+                    "未通过"
+                ],
+            }
+        ],
         batch_size=200,
     )
     asyncio.run(task.do_task())

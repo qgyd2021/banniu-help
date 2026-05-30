@@ -1,9 +1,30 @@
 [
   {
     "enable": true,
-    "type": "banniu_task_download",
+    "type": "banniu_retrial_task_download",
     "project_id": "39369",
     "check_interval": 60,
+    "output_dir": "temp/banniu_39369/step_1_banniu_task_download/retrial_tasks"
+  },
+  {
+    "enable": true,
+    "type": "banniu_task_batch_update",
+    "check_interval": 60,
+    "project_id": "39369",
+    "app_id": "41339",
+    "platform_to_dirs": [
+      ["retrial_tasks", "temp/banniu_39369/step_1_banniu_task_download/retrial_tasks", "temp/banniu_39369/step_1_banniu_task_download/tasks"]
+    ],
+    "column_name_to_key": {
+      "是否修改内容": "否"
+    },
+    "batch_size": 200
+  },
+  {
+    "enable": true,
+    "type": "banniu_pending_review_task_download",
+    "project_id": "39369",
+    "check_interval": 600,
     "fetch_delay_seconds": 21600,
     "output_dir": "temp/banniu_39369/step_1_banniu_task_download/tasks",
     "last_fetch_tasks": "temp/banniu_39369/step_1_banniu_task_download/last_fetch_tasks.json",
@@ -166,6 +187,10 @@
       "K20GT": {
         "迈从": ["迈从", "MCHose", "MC Hose"],
         "迈从K20GT": ["迈从K20GT", "迈从 K20GT", "迈从K20 GT", "迈从 K20 GT", "K20GT"]
+      },
+      "A7V3": {
+        "迈从": ["迈从", "MCHose", "MC Hose"],
+        "迈从A7V3": ["迈从A7V3", "迈从 A7V3", "A7V3", "迈从A7鼠标"]
       }
     }
   },
@@ -223,7 +248,8 @@
         "Ace68Air 2": ["迈从", "迈从Ace68Air2"],
         "A7V2": ["迈从", "迈从A7V2"],
         "Ace68V2": ["迈从", "迈从ACE68v2"],
-        "K20GT": ["迈从", "迈从K20GT"]
+        "K20GT": ["迈从", "迈从K20GT"],
+        "A7V3": ["迈从", "迈从A7V3"]
       },
       "required_image_item_dict": {
         "Ace68Turbo":["keyboard"],
@@ -231,7 +257,8 @@
         "Ace68Air 2": ["keyboard"],
         "A7V2": ["mouse"],
         "Ace68V2": ["keyboard"],
-        "K20GT": []
+        "K20GT": [],
+        "A7V3": ["mouse"]
       },
       "min_image_count": 1,
       "max_image_cross_rate": 0.5,
@@ -277,7 +304,8 @@
         "Ace68Air 2": ["迈从", "迈从Ace68Air2"],
         "A7V2": ["迈从", "迈从A7V2"],
         "Ace68V2": ["迈从", "迈从ACE68v2"],
-        "K20GT": ["迈从", "迈从K20GT"]
+        "K20GT": ["迈从", "迈从K20GT"],
+        "A7V3": ["迈从", "迈从A7V3"]
       },
       "required_image_item_dict": {
         "Ace68Turbo":["keyboard"],
@@ -285,7 +313,8 @@
         "Ace68Air 2": ["keyboard"],
         "A7V2": ["mouse"],
         "Ace68V2": ["keyboard"],
-        "K20GT": []
+        "K20GT": [],
+        "A7V3": ["mouse"]
       },
       "min_image_count": 1,
       "max_image_cross_rate": 0.5,
@@ -298,7 +327,7 @@
   },
   {
     "enable": true,
-    "type": "banniu_task_batch_update",
+    "type": "banniu_task_batch_update_by_condition",
     "check_interval": 60,
     "project_id": "39369",
     "app_id": "41339",
@@ -313,9 +342,20 @@
       ["unknown", "temp/banniu_39369/step_7_post_review_final/unknown", "temp/banniu_39369/step_8_finished/unknown"]
     ],
     "column_name_to_key": {
-      "审核状态": "post_review_final.approved_in_str",
-      "审核不通过原因": "post_review_final.reply_to_user"
+      "审核状态": "{{ post_review_final.approved_in_str }}",
+      "审核不通过原因": "{{ post_review_final.reply_to_user }}"
     },
+    "condition_column": [
+      {
+        "字段": "审核状态",
+        "字段类型": "文本类型",
+        "搜索类型": "包含任一项",
+        "搜索内容": [
+          "待审核",
+          "未通过"
+        ]
+      }
+    ],
     "batch_size": 200
   }
 ]

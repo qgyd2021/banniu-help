@@ -44,8 +44,8 @@ class BanNiuClient(BanNiuRestfulClient):
             v = form.map_option_value_to_id(cid, v)
             contents[cid] = v
 
-        print(f"named_fields: {json.dumps(named_fields, ensure_ascii=False, indent=4)}")
-        print(f"contents: {json.dumps(contents, ensure_ascii=False, indent=4)}")
+        # print(f"named_fields: {json.dumps(named_fields, ensure_ascii=False, indent=4)}")
+        # print(f"contents: {json.dumps(contents, ensure_ascii=False, indent=4)}")
         return self.task_update(
             project_id=str(project_id),
             app_id=str(app_id),
@@ -106,6 +106,17 @@ class BanNiuClient(BanNiuRestfulClient):
                 field = int(field)
                 behavior_type = self.get_behavior_type_by_name(behavior_type)
                 search_type = self.get_search_type_by_name(search_type)
+
+                if isinstance(value, list):
+                    value = [form.map_option_value_to_id(field, v) for v in value]
+                elif isinstance(value, str):
+                    value = form.map_option_value_to_id(field, value)
+                if behavior_type == 2:  # 数值类型
+                    if isinstance(value, list):
+                        value = [int(v) for v in value]
+                    elif isinstance(value, str):
+                        value = int(value)
+
                 item_ = {
                     "id": field,
                     "behaviorType": behavior_type,
@@ -127,11 +138,6 @@ class BanNiuClient(BanNiuRestfulClient):
 
 
 class AsyncBanNiuClient(AsyncBanNiuRestfulClient):
-    """
-    ``BanNiuClient`` 的异步版本：在 ``AsyncBanNiuRestfulClient`` 之上提供
-    ``task_create_pretty`` / ``task_list_pretty`` 等封装。
-    """
-
     @cacheout.memoize(ttl=3600 * 1)
     async def build_form(self, project_id: str) -> ColumnListForm:
         js = await self.column_list(project_id=project_id)
@@ -194,20 +200,23 @@ class AsyncBanNiuClient(AsyncBanNiuRestfulClient):
                 field = int(field)
                 behavior_type = BanNiuClient.get_behavior_type_by_name(behavior_type)
                 search_type = BanNiuClient.get_search_type_by_name(search_type)
-                value = form.map_option_value_to_id(column_id=field, value=value)
-                value = int(value)
-                try:
-                    value = int(value)
-                except ValueError:
-                    value = value
 
-                item_ = {
+                if isinstance(value, list):
+                    value = [form.map_option_value_to_id(field, v) for v in value]
+                elif isinstance(value, str):
+                    value = form.map_option_value_to_id(field, value)
+                if behavior_type == 2:  # 数值类型
+                    if isinstance(value, list):
+                        value = [int(v) for v in value]
+                    elif isinstance(value, str):
+                        value = int(value)
+
+                condition_column_.append({
                     "id": field,
                     "behaviorType": behavior_type,
                     "searchType": search_type,
                     "value": value,
-                }
-                condition_column_.append(item_)
+                })
             condition_column = json.dumps(condition_column_, ensure_ascii=False)
 
         return await self.task_list(
@@ -305,11 +314,60 @@ def main3():
     client = BanNiuClient(app_key=APP_KEY, app_secret=APP_SECRET, access_token=ACCESS_TOKEN)
 
     condition_column = [
+        # {
+        #     "字段": "审核状态",
+        #     "字段类型": "单选",
+        #     "搜索类型": "等于",
+        #     "搜索内容": "待审核",
+        # },
+        {
+            "字段": "是否修改内容",
+            "字段类型": "文本类型",
+            "搜索类型": "等于",
+            "搜索内容": "是",
+        }
+    ]
+    print(condition_column)
+    js = client.task_list_pretty(
+        project_id=project_id,
+        # star_created=one_year_ago_dt.strftime("%Y-%m-%d %H:%M:%S"),
+        # end_created=now_dt.strftime("%Y-%m-%d %H:%M:%S"),
+        condition_column=condition_column,
+    )
+    print(json.dumps(js, ensure_ascii=False, indent=4))
+
+    return
+
+
+def main4():
+    from project_settings import environment
+
+    APP_KEY = environment.get("BANNIU_APP_KEY")
+    APP_SECRET = environment.get("BANNIU_APP_SECRET")
+    ACCESS_TOKEN = environment.get("BANNIU_ACCESS_TOKEN")
+
+    now_dt = datetime.now()
+    one_year_ago_dt = now_dt - timedelta(days=1)
+
+    project_id = "39369"
+
+    client = BanNiuClient(app_key=APP_KEY, app_secret=APP_SECRET, access_token=ACCESS_TOKEN)
+
+    condition_column = [
+        {
+            "字段": "taskId(int)",
+            "字段类型": "数值类型",
+            "搜索类型": "包含任一项",
+            "搜索内容": ["7373824", "7321359", "7359623", "7358107"],
+        },
         {
             "字段": "审核状态",
-            "字段类型": "单选",
-            "搜索类型": "等于",
-            "搜索内容": "待审核",
+            "字段类型": "文本类型",
+            "搜索类型": "包含任一项",
+            "搜索内容": [
+                "待审核",
+                "未通过"
+            ],
         }
     ]
     js = client.task_list_pretty(
@@ -327,3 +385,4 @@ if __name__ == "__main__":
     # main()
     # main2()
     main3()
+    # main4()

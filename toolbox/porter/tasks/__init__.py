@@ -1,7 +1,8 @@
 #!/usr/bin/python3
 # -*- coding: utf-8 -*-
 from toolbox.porter.tasks.banniu_task_batch_update_task import BanNiuTaskBatchUpdateTask
-from toolbox.porter.tasks.banniu_task_download_task import BanNiuTaskDownloadTask
+from toolbox.porter.tasks.banniu_task_batch_update_by_condition_task import BanNiuTaskBatchUpdateByConditionTask
+from toolbox.porter.tasks.banniu_task_download_task import BanNiuPendingReviewTaskDownloadTask
 from toolbox.porter.tasks.banniu_task_update_task import BanNiuTaskUpdateTask
 from toolbox.porter.tasks.portal_server_task import PortalServerTask
 

@@ -600,8 +600,49 @@ def main4():
     return
 
 
+def main5():
+    """
+    "7373824\n7321359"
+    :return:
+    """
+    from project_settings import environment
+
+    APP_KEY = environment.get("BANNIU_APP_KEY")
+    APP_SECRET = environment.get("BANNIU_APP_SECRET")
+    ACCESS_TOKEN = environment.get("BANNIU_ACCESS_TOKEN")
+
+    app_id = "41339"
+    project_id = "39369"
+
+    client = BanNiuRestfulClient(app_key=APP_KEY, app_secret=APP_SECRET, access_token=ACCESS_TOKEN)
+
+    condition_column = [
+        {
+            "id": 0,
+            "behaviorType": -1,
+            "searchType": "5",
+            "value": ["7373824", "7321359"]
+        },
+        {
+            "id": 39395,
+            "behaviorType": 4,
+            "searchType": "5",
+            "value": ["37783", "37784"]
+        }
+    ]
+    condition_column = json.dumps(condition_column)
+    js = client.task_list(
+        project_id=project_id,
+        condition_column=condition_column
+    )
+    print(json.dumps(js, ensure_ascii=False, indent=4))
+
+    return
+
+
 if __name__ == "__main__":
     # main()
     # main2()
     # main3()
-    main4()
+    # main4()
+    main5()

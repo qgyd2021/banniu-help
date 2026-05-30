@@ -84,7 +84,7 @@ def main():
 
     # ui
     with gr.Blocks() as blocks:
-        gr.Markdown(value="live recording.")
+        gr.Markdown(value="post review.")
         with gr.Tabs():
             _ = get_project_overview_tab()
             _ = get_shell_tab()

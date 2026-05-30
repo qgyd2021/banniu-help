@@ -147,7 +147,10 @@ class ColumnListForm(object):
         return m
 
     def _build_name_to_id(self) -> Dict[str, str]:
-        m: Dict[str, str] = {}
+        m: Dict[str, str] = {
+            "taskId(int)": "0",
+            "taskId(str)": "-1"
+        }
         for row in self._rows:
             name = row.get("name")
             if not isinstance(name, str) or not name.strip():
