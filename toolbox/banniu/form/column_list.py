@@ -238,9 +238,11 @@ class ColumnListForm(object):
         for opt in options:
             if not isinstance(opt, dict):
                 continue
-            title = str(opt.get("title") or "").strip()
-            oid = str(opt.get("id") or "").strip()
-            if title and oid and title not in title_to_id:
+            title = opt.get("title")
+            oid = opt.get("id")
+            if title is None or oid is None:
+                continue
+            if title not in title_to_id:
                 title_to_id[title] = oid
 
         def _map_one(token: str) -> str:
