@@ -191,6 +191,10 @@
       "A7V3": {
         "迈从": ["迈从", "MCHose", "MC Hose"],
         "迈从A7V3": ["迈从A7V3", "迈从 A7V3", "A7V3", "迈从A7鼠标"]
+      },
+      "K99V3": {
+        "迈从": ["迈从", "MCHose", "MC Hose"],
+        "迈从K99V3": ["迈从K99V3", "迈从 K99V3", "K99V3"]
       }
     }
   },
@@ -249,7 +253,8 @@
         "A7V2": ["迈从", "迈从A7V2"],
         "Ace68V2": ["迈从", "迈从ACE68v2"],
         "K20GT": ["迈从", "迈从K20GT"],
-        "A7V3": ["迈从", "迈从A7V3"]
+        "A7V3": ["迈从", "迈从A7V3"],
+        "K99V3": ["迈从", "迈从K99V3"]
       },
       "required_image_item_dict": {
         "Ace68Turbo":["keyboard"],
@@ -258,7 +263,8 @@
         "A7V2": ["mouse"],
         "Ace68V2": ["keyboard"],
         "K20GT": [],
-        "A7V3": ["mouse"]
+        "A7V3": ["mouse"],
+        "K99V3": ["keyboard"]
       },
       "min_image_count": 1,
       "max_image_cross_rate": 0.5,
@@ -305,7 +311,8 @@
         "A7V2": ["迈从", "迈从A7V2"],
         "Ace68V2": ["迈从", "迈从ACE68v2"],
         "K20GT": ["迈从", "迈从K20GT"],
-        "A7V3": ["迈从", "迈从A7V3"]
+        "A7V3": ["迈从", "迈从A7V3"],
+        "K99V3": ["迈从", "迈从K99V3"]
       },
       "required_image_item_dict": {
         "Ace68Turbo":["keyboard"],
@@ -314,7 +321,8 @@
         "A7V2": ["mouse"],
         "Ace68V2": ["keyboard"],
         "K20GT": [],
-        "A7V3": ["mouse"]
+        "A7V3": ["mouse"],
+        "K99V3": ["keyboard"]
       },
       "min_image_count": 1,
       "max_image_cross_rate": 0.5,

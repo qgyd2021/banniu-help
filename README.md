@@ -9,6 +9,7 @@
 banniu-help:v20260528_1145
 docker build -t banniu-help:v20260529_1453 .
 docker build -t banniu-help:v20260529_1638 .
+docker build -t banniu-help:v20260530_1945 .
 
 docker stop BanniuHelp && docker rm BanniuHelp
 
@@ -17,7 +18,7 @@ docker run -d \
 --network host \
 --restart always \
 -v /home/honeytian/PycharmProjects/banniu-help/temp:/code/temp \
-banniu-help:v20260529_1638
+banniu-help:v20260530_1945
 
 
 ```
