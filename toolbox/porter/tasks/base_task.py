@@ -7,7 +7,7 @@ import logging
 import shutil
 import traceback
 from pathlib import Path
-from typing import List, Optional
+from typing import List, Optional, Set
 
 import aiofiles
 
@@ -111,6 +111,33 @@ class TaskJsonUtils(object):
         }
         await self.write_json(task_file, payload)
         return task_file.as_posix()
+
+    @staticmethod
+    def match_task_id_from_filename(stem: str, task_ids: Set[str]) -> bool:
+        # 文件名形如 {task_id}.json；safe_move 去重时可能产生 {task_id}_1.json。
+        if stem in task_ids:
+            return True
+        head, sep, tail = stem.rpartition("_")
+        return bool(sep) and tail.isdigit() and head in task_ids
+
+    def remove_duplicated_task_files(self, task_ids: Set[str], source_dirs: List[Path]) -> int:
+        if len(task_ids) == 0 or len(source_dirs) == 0:
+            return 0
+        removed = 0
+        for source_dir in source_dirs:
+            if not source_dir.exists():
+                continue
+            for fp in source_dir.rglob("**/*.json"):
+                if not fp.is_file():
+                    continue
+                if not self.match_task_id_from_filename(fp.stem, task_ids):
+                    continue
+                try:
+                    fp.unlink()
+                    removed += 1
+                except OSError as e:
+                    pass
+        return removed
 
 
 if __name__ == "__main__":

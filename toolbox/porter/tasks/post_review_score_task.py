@@ -169,6 +169,7 @@ class PostReviewScoreTask(BaseTask, TaskJsonUtils):
                             media_ok=media_ok,
                         )
 
+                post_review_final.stamp_reviewed_at()
                 dst = target_dir / src.name
                 await self.append_kv_to_task_file(src, kv={"post_review_final": post_review_final.to_dict()})
                 self.safe_move(src, dst)
@@ -214,6 +215,7 @@ class PostReviewOnlyFinal(BaseTask, TaskJsonUtils):
                 post_review_final.approved_in_str = PostReviewFinal.get_approved_in_str(post_review_final.approved)
                 post_review_final.reviewer = "人工终审"
 
+                post_review_final.stamp_reviewed_at()
                 dst = target_dir / src.name
                 await self.append_kv_to_task_file(src, kv={"post_review_final": post_review_final.to_dict()})
                 self.safe_move(src, dst)
@@ -280,6 +282,7 @@ class PostReviewAutomaticFinal(BaseTask, TaskJsonUtils):
                 logger.info(f"{self.flag} 自动审核: platform={platform}, source={source_dir.as_posix()}")
                 # TODO: 选设置60秒审一个，控制频率，等后续感觉没问题了，再放开。
                 await asyncio.sleep(60)
+                post_review_final.stamp_reviewed_at()
                 dst = target_dir / src.name
                 await self.append_kv_to_task_file(src, kv={"post_review_final": post_review_final.to_dict()})
                 self.safe_move(src, dst)

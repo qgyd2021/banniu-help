@@ -108,6 +108,8 @@
           </span>
           {# reviewer 是新加的字段，旧 JSON 里可能没有；缺失时 rf.reviewer 为 Undefined，or '' 兜底为空串 #}
           {% if rf.reviewer %}<span class="reviewer-chip">审核员：{{ rf.reviewer or '' }}</span>{% endif %}
+          {# reviewed_at 同样为新增字段，旧 JSON 可能缺失，缺失时不展示 #}
+          {% if rf.reviewed_at %}<span class="reviewer-chip">审核时间：{{ rf.reviewed_at or '' }}</span>{% endif %}
         </div>
         <div class="info-line"><span class="label">标题：</span><span class="value">{{ pd.title or '-' }}</span></div>
         <div class="info-line"><span class="label">正文：</span><span class="value">{{ pd.desc or '-' }}</span></div>

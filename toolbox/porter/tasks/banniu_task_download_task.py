@@ -13,7 +13,7 @@ from typing import List, Set, Tuple
 logger = logging.getLogger("toolbox")
 
 from project_settings import environment, project_path, time_zone_info
-from toolbox.porter.tasks.base_task import BaseTask, global_file_lock_dict
+from toolbox.porter.tasks.base_task import BaseTask, TaskJsonUtils, global_file_lock_dict
 from toolbox.banniu.sdk.banniu_client import AsyncBanNiuClient
 from toolbox.banniu.form.column_list import ColumnListForm
 from toolbox.banniu.form.task_list import TaskListForm
@@ -280,7 +280,7 @@ class BanNiuPendingReviewTaskDownloadTask(BaseTask):
 
 
 @BaseTask.register("banniu_retrial_task_download")
-class BanNiuRetrialTaskDownloadTask(BaseTask):
+class BanNiuRetrialTaskDownloadTask(BaseTask, TaskJsonUtils):
     def __init__(self,
                  project_id: str,
                  check_interval: int,
@@ -390,34 +390,6 @@ class BanNiuRetrialTaskDownloadTask(BaseTask):
                 await f.write(json.dumps(payload, ensure_ascii=False, indent=2) + "\n")
         return filename.as_posix()
 
-    @staticmethod
-    def match_task_id_from_filename(stem: str, task_ids: Set[str]) -> bool:
-        # 文件名形如 {task_id}.json；safe_move 去重时可能产生 {task_id}_1.json。
-        if stem in task_ids:
-            return True
-        head, sep, tail = stem.rpartition("_")
-        return bool(sep) and tail.isdigit() and head in task_ids
-
-    def remove_duplicated_task_files(self, task_ids: Set[str]) -> int:
-        if len(task_ids) == 0 or len(self.source_dirs) == 0:
-            return 0
-        removed = 0
-        for source_dir in self.source_dirs:
-            if not source_dir.exists():
-                continue
-            for fp in source_dir.rglob("**/*.json"):
-                if not fp.is_file():
-                    continue
-                if not self.match_task_id_from_filename(fp.stem, task_ids):
-                    continue
-                try:
-                    fp.unlink()
-                    removed += 1
-                    logger.info(f"{self.flag}删除重复任务文件: file={fp.as_posix()}")
-                except OSError as e:
-                    logger.error(f"{self.flag}删除文件失败: file={fp.as_posix()}, err={e}")
-        return removed
-
     async def do_task(self):
         # print(f"do_task")
         column_form = await self.fetch_column_form()
@@ -444,7 +416,7 @@ class BanNiuRetrialTaskDownloadTask(BaseTask):
             new_count += 1
             logger.info(f"{self.flag}新增任务 task_id={task_id}")
 
-        removed = self.remove_duplicated_task_files(set(new_ids))
+        removed = self.remove_duplicated_task_files(task_ids=set(new_ids), source_dirs=self.source_dirs)
         logger.info(f"{self.flag}本轮拉取 {len(raw_rows)} 条，新增 {new_count} 条，清理重复文件 {removed} 个。")
 
 

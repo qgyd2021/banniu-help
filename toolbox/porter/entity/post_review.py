@@ -2,9 +2,13 @@
 # -*- coding: utf-8 -*-
 from __future__ import annotations
 
+from datetime import datetime
+from zoneinfo import ZoneInfo
 from typing import Any, Dict, Union, List, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
+
+from project_settings import time_zone_info
 
 
 CountValue = Union[int, float, str]
@@ -77,6 +81,7 @@ class PostReviewFinal(BaseModel):
     approved_in_str: str = Field(default=None, description="是否审核通过, 字符类型，可选值：待审核，已通过，未通过。")
     reply_to_user: str = Field(default="", description="给用户的回复。")
     reviewer: str = Field(default="人工审核", description="审核者标识")
+    reviewed_at: str = Field(default="", description="审核时间，格式 %Y-%m-%d %H:%M:%S。")
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "PostReviewFinal":
@@ -84,6 +89,15 @@ class PostReviewFinal(BaseModel):
 
     def to_dict(self) -> Dict[str, Any]:
         return self.model_dump()
+
+    @staticmethod
+    def now_str() -> str:
+        return datetime.now(ZoneInfo(time_zone_info)).strftime("%Y-%m-%d %H:%M:%S")
+
+    def stamp_reviewed_at(self) -> "PostReviewFinal":
+        """标记审核时间为当前时间；所有 task_id 被审核（最终决策）时调用。"""
+        self.reviewed_at = self.now_str()
+        return self
 
     @staticmethod
     def get_approved_in_str(approved: bool) -> str:
