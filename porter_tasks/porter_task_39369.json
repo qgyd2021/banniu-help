@@ -4,7 +4,24 @@
     "type": "banniu_retrial_task_download",
     "project_id": "39369",
     "check_interval": 60,
-    "output_dir": "temp/banniu_39369/step_1_banniu_task_download/retrial_tasks"
+    "output_dir": "temp/banniu_39369/step_1_banniu_task_download/retrial_tasks",
+    "source_dirs": [
+      "temp/banniu_39369/step_7_post_review_final",
+      "temp/banniu_39369/step_6_post_review_submit",
+      "temp/banniu_39369/step_5_4_post_review_image_item_review",
+      "temp/banniu_39369/step_5_3_post_review_text_tags_review",
+      "temp/banniu_39369/step_5_2_post_review_text_length_review",
+      "temp/banniu_39369/step_5_1_post_review_text_emotion_review",
+      "temp/banniu_39369/step_4_post_review_duplicate_review",
+      "temp/banniu_39369/step_3_bilibili_share_media_download",
+      "temp/banniu_39369/step_3_dewu_share_media_download",
+      "temp/banniu_39369/step_3_douyin_share_media_download",
+      "temp/banniu_39369/step_3_kuaishou_share_media_download",
+      "temp/banniu_39369/step_3_weibo_share_media_download",
+      "temp/banniu_39369/step_3_xiaoheihe_share_media_download",
+      "temp/banniu_39369/step_3_xiaohongshu_share_media_download",
+      "temp/banniu_39369/step_2_post_review_router"
+    ]
   },
   {
     "enable": true,
@@ -16,7 +33,7 @@
       ["retrial_tasks", "temp/banniu_39369/step_1_banniu_task_download/retrial_tasks", "temp/banniu_39369/step_1_banniu_task_download/tasks"]
     ],
     "column_name_to_key": {
-      "是否修改内容": "否"
+      "是否修改内容": "重审进行中"
     },
     "batch_size": 200
   },
@@ -350,6 +367,7 @@
       ["unknown", "temp/banniu_39369/step_7_post_review_final/unknown", "temp/banniu_39369/step_8_finished/unknown"]
     ],
     "column_name_to_key": {
+      "是否修改内容": "否（待修改）",
       "审核状态": "{{ post_review_final.approved_in_str }}",
       "审核不通过原因": "{{ post_review_final.reply_to_user }}"
     },

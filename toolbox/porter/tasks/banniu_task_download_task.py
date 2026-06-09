@@ -288,6 +288,7 @@ class BanNiuRetrialTaskDownloadTask(BaseTask):
                  key_of_app_secret: str = "BANNIU_APP_SECRET",
                  key_of_access_token: str = "BANNIU_ACCESS_TOKEN",
                  output_dir: str = "banniu_task_download/tasks",
+                 source_dirs: List[str] = None,
                  ):
         super().__init__(
             flag=f"[{self.__class__.__name__}_ProjectId_{project_id}]",
@@ -300,6 +301,12 @@ class BanNiuRetrialTaskDownloadTask(BaseTask):
             self.output_dir = project_path / output_dir
         else:
             self.output_dir = Path(output_dir)
+
+        # 拉取到新的 task_id 后，会在这些目录里递归删除同 task_id 的旧文件，
+        # 避免管道中残留旧数据被继续处理。
+        source_dirs = source_dirs or []
+        self.source_dirs = [self.resolve_project_path(source_dir) for source_dir in source_dirs]
+
         app_key = environment.get(key_of_app_key)
         app_secret = environment.get(key_of_app_secret)
         access_token = environment.get(key_of_access_token)
@@ -326,8 +333,9 @@ class BanNiuRetrialTaskDownloadTask(BaseTask):
                 "字段": "是否修改内容",
                 "字段类型": "文本类型",
                 "搜索类型": "等于",
-                "搜索内容": "是",
-                # "搜索内容": "否",
+                "搜索内容": "是（已修改）",
+                # "搜索内容": "否（待修改）",
+                # "搜索内容": "重审进行中",
             }
         ]
         all_rows: List[dict] = []
@@ -342,7 +350,7 @@ class BanNiuRetrialTaskDownloadTask(BaseTask):
                     condition_column=condition_column,
                 )
                 rows = js["response"]["map"]["result"]
-                print(f"rows: {rows}")
+                # print(f"rows: {rows}")
                 form = TaskListForm(raw_rows=rows if isinstance(rows, list) else [])
                 page_rows = form.raw_rows
                 if not page_rows:
@@ -382,12 +390,40 @@ class BanNiuRetrialTaskDownloadTask(BaseTask):
                 await f.write(json.dumps(payload, ensure_ascii=False, indent=2) + "\n")
         return filename.as_posix()
 
+    @staticmethod
+    def match_task_id_from_filename(stem: str, task_ids: Set[str]) -> bool:
+        # 文件名形如 {task_id}.json；safe_move 去重时可能产生 {task_id}_1.json。
+        if stem in task_ids:
+            return True
+        head, sep, tail = stem.rpartition("_")
+        return bool(sep) and tail.isdigit() and head in task_ids
+
+    def remove_duplicated_task_files(self, task_ids: Set[str]) -> int:
+        if len(task_ids) == 0 or len(self.source_dirs) == 0:
+            return 0
+        removed = 0
+        for source_dir in self.source_dirs:
+            if not source_dir.exists():
+                continue
+            for fp in source_dir.rglob("**/*.json"):
+                if not fp.is_file():
+                    continue
+                if not self.match_task_id_from_filename(fp.stem, task_ids):
+                    continue
+                try:
+                    fp.unlink()
+                    removed += 1
+                    logger.info(f"{self.flag}删除重复任务文件: file={fp.as_posix()}")
+                except OSError as e:
+                    logger.error(f"{self.flag}删除文件失败: file={fp.as_posix()}, err={e}")
+        return removed
+
     async def do_task(self):
-        print(f"do_task")
+        # print(f"do_task")
         column_form = await self.fetch_column_form()
-        print(f"column_form: {column_form}")
+        # print(f"column_form: {column_form}")
         raw_rows = await self.fetch_retrial_task_rows()
-        print(f"raw_rows: {raw_rows}")
+        # print(f"raw_rows: {raw_rows}")
         if not raw_rows:
             logger.info(f"{self.flag}未拉取到任务数据。")
             return
@@ -407,7 +443,9 @@ class BanNiuRetrialTaskDownloadTask(BaseTask):
             new_ids.append(task_id)
             new_count += 1
             logger.info(f"{self.flag}新增任务 task_id={task_id}")
-        logger.info(f"{self.flag}本轮拉取 {len(raw_rows)} 条，新增 {new_count} 条。")
+
+        removed = self.remove_duplicated_task_files(set(new_ids))
+        logger.info(f"{self.flag}本轮拉取 {len(raw_rows)} 条，新增 {new_count} 条，清理重复文件 {removed} 个。")
 
 
 def main():
