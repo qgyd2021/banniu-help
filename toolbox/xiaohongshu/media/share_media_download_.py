@@ -24,9 +24,9 @@ from pydantic import BaseModel, ConfigDict, Field
 from typing import Any, Dict, List, Optional, Tuple, Union
 from urllib.parse import parse_qs, urlparse
 
-import cacheout
 import requests
 
+from toolbox.xiaohongshu.homepage.user_info import UserInfo, UserMeta
 from toolbox.utils.utils import when_error, when_expected_error, ExpectedError
 
 CountValue = Union[int, float, str]
@@ -108,14 +108,35 @@ class ShareMediaDownload(ShareMediaDownloadRestful):
         r"https?://(?:www\.)?rednote\.com/[^\s]+",
     ]
 
-    @cacheout.memoize(ttl=600)
-    def get_user_profile_state(self, author_user_id: str) -> Dict[str, Any]:
-        author_user_id = str(author_user_id or "").strip()
+    def __init__(self) -> None:
+        super().__init__()
+        self.user_info = UserInfo()
+
+    @staticmethod
+    def apply_user_meta_to_post_meta(
+        post_meta: PostMeta,
+        user_meta: Optional[UserMeta],
+    ) -> PostMeta:
+        if user_meta is None:
+            return post_meta
+        if user_meta.author_user_id:
+            post_meta.author_user_id = str(user_meta.author_user_id)
+        if user_meta.nickname:
+            post_meta.nickname = str(user_meta.nickname)
+        if user_meta.unique_id:
+            post_meta.user_id = str(user_meta.unique_id)
+            post_meta.unique_id = str(user_meta.unique_id)
+        return post_meta
+
+    @when_error(return_value=None)
+    def get_user_meta_by_post_meta(self, post_meta: PostMeta) -> Optional[UserMeta]:
+        author_user_id = str(post_meta.author_user_id or "").strip()
         if not author_user_id:
-            raise AssertionError("author_user_id is empty")
-        url = f"https://www.xiaohongshu.com/user/profile/{author_user_id}"
-        html = self.get_text_by_url(url)
-        return self.parse_initial_state(html)
+            return None
+        user_meta_dict = self.user_info.get_user_meta_by_author_user_id(author_user_id)
+        if user_meta_dict is None:
+            return None
+        return UserMeta.from_dict(user_meta_dict)
 
     @classmethod
     def get_share_url_by_share_text(cls, share_text: str) -> str:
@@ -147,82 +168,36 @@ class ShareMediaDownload(ShareMediaDownloadRestful):
             return note_id
         return parsed.path.strip("/").split("/")[-1]
 
-    @staticmethod
-    def parse_initial_state(html: str) -> Dict[str, Any]:
-        """
-        从落地页 HTML 抽 ``window.__INITIAL_STATE__`` JSON。
-        ``undefined`` / ``NaN`` / ``Infinity`` 不是合法 JSON 值，需替换。
-        """
-        marker = "window.__INITIAL_STATE__="
-        start = html.find(marker)
-        if start < 0:
-            raise AssertionError("window.__INITIAL_STATE__ not found")
-        start += len(marker)
-        end = html.find("</script>", start)
-        if end < 0:
-            raise AssertionError("window.__INITIAL_STATE__ tail not found")
-        raw = html[start:end].strip()
-        raw = re.sub(r"\bundefined\b", "null", raw)
-        raw = re.sub(r"\bNaN\b", "null", raw)
-        raw = re.sub(r"\bInfinity\b", "null", raw)
-        return json.loads(raw)
-
-    @when_error(return_value=None)
-    def get_red_id_by_author_user_id(self, author_user_id: str) -> Optional[str]:
-        state = self.get_user_profile_state(author_user_id)
-        user_page_data = (state.get("user") or {}).get("userPageData") or {}
-        basic_info = user_page_data.get("basicInfo") or {}
-        red_id = str(basic_info.get("redId") or "").strip()
-        return red_id or None
-
-    @when_error(return_value=None)
-    def enrich_post_meta_user_info(self, post_meta: PostMeta) -> PostMeta:
-        author_user_id = str(post_meta.author_user_id or "").strip()
-        if not author_user_id:
-            return post_meta
-
-        user_id = str(post_meta.user_id or "").strip()
-        if user_id and user_id != author_user_id:
-            post_meta.unique_id = user_id
-            return post_meta
-
-        red_id = self.get_red_id_by_author_user_id(author_user_id)
-        if red_id:
-            post_meta.user_id = red_id
-            post_meta.unique_id = red_id
-        return post_meta
-
     def get_post_meta_by_share_text(self, share_text: str) -> dict:
         share_url = self.get_share_url_by_share_text(share_text)
-        result = self.get_post_meta_by_share_url(share_url)
-        return result
+        return self.get_post_meta_by_share_url(share_url)
 
     @when_expected_error(return_value=None)
     def get_post_meta_by_share_url(self, share_url: str) -> dict:
         html, final_url = self.get_html_and_final_url_by_share_url(share_url)
-        # print(f"final_url: {final_url}")
-
         note_id = self.parse_note_id_by_url(final_url)
-        # print(f"note_id: {note_id}")
-
-        state = self.parse_initial_state(html)
+        state = UserInfo.parse_initial_state(html)
         note = state["note"]["noteDetailMap"][note_id]["note"]
-        # print(json.dumps(note, ensure_ascii=False, indent=2))
 
         note_type = note["type"]
         if note_type == "normal":
-            post_meta: PostMeta = self.build_post_meta_from_note_branch_1(note)
+            post_meta = self.build_post_meta_from_note_branch_1(note)
         elif note_type == "video":
-            post_meta: PostMeta = self.build_post_meta_from_note_branch_2(note)
+            post_meta = self.build_post_meta_from_note_branch_2(note)
         else:
             raise NotImplementedError(f"unknown note type: {note_type}")
 
         if post_meta is None:
-            raise ExpectedError(status_code=60500, message="未成功解析到信息；share_url: {share_url}")
+            return None
 
         post_meta.share_url = share_url
         post_meta.final_url = final_url
-        post_meta = self.enrich_post_meta_user_info(post_meta)
+
+        if post_meta is None:
+            raise ExpectedError(status_code=60500, message=f"未成功解析到信息；share_url: {share_url}")
+
+        user_meta = self.get_user_meta_by_post_meta(post_meta)
+        post_meta = self.apply_user_meta_to_post_meta(post_meta, user_meta)
         return post_meta.to_dict()
 
     @when_error(return_value=None)
@@ -297,9 +272,10 @@ def main() -> None:
         https://www.xiaohongshu.com/discovery/item/69f5ce1f0000000023017c00?source=webshare&xhsshare=pc_web&xsec_token=ABlhx3-jH590AcirWbCOkw7vyiuwHKMJRzcp1BMFYIpfo=&xsec_source=pc_share
 
 """
-    result = client.get_post_meta_by_share_text(share_text)
+    post_meta = client.get_post_meta_by_share_text(share_text)
+
     print("post_meta:")
-    print(json.dumps(result, ensure_ascii=False, indent=2))
+    print(json.dumps(post_meta, ensure_ascii=False, indent=2))
 
 
 if __name__ == "__main__":

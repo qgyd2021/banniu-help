@@ -6,7 +6,7 @@ __pycache__/
 
 data/
 dotenv/
-examples/
+#examples/
 logs/
 #porter_tasks/
 temp/
