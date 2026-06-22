@@ -1,11 +1,9 @@
 #!/usr/bin/python3
 # -*- coding: utf-8 -*-
 import asyncio
-from datetime import datetime
 import logging
-import os
-from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+import re
+from typing import Dict, List, Tuple
 
 logger = logging.getLogger("toolbox")
 
@@ -36,6 +34,18 @@ class PostReviewTextTagsReviewTask(BaseTask, TaskJsonUtils):
             self.platform_to_dir.append((p, src, dst))
         self.tags_config = tags_config or dict()
 
+    @staticmethod
+    def desc_has_hashtag_tag(desc: str, tag: str) -> bool:
+        """正文 desc 中出现 #标签 或 # 标签（# 后可有空白）时视为带有该标签。"""
+        tag = str(tag or "").strip().lower()
+        if not tag:
+            return False
+        text = str(desc or "").lower()
+        if not text:
+            return False
+        pattern = r"#\s*" + re.escape(tag)
+        return re.search(pattern, text) is not None
+
     async def do_task(self):
         if not self.platform_to_dir:
             logger.info(f"{self.flag}platform_to_dirs 为空，跳过")
@@ -61,10 +71,11 @@ class PostReviewTextTagsReviewTask(BaseTask, TaskJsonUtils):
                 user_tags = [str(tag).strip().strip("#").strip().lower() for tag in post_meta.tags]
 
                 match = set()
+                desc = post_meta.desc or ""
                 for standard, similar_list in product_tags_config.items():
                     for similar in similar_list:
                         similar = str(similar).lower()
-                        if similar in user_tags:
+                        if similar in user_tags or self.desc_has_hashtag_tag(desc, similar):
                             match.add(standard)
                             break
                 miss = set(product_tags_config.keys()) - match
@@ -90,10 +101,6 @@ def main():
             ("douyin", "temp/banniu_37728/step_4_post_review_text_emotion_review/douyin", "temp/banniu_37728/step_5_post_review_text_tags_review/douyin"),
             ("xiaohongshu", "temp/banniu_37728/step_4_post_review_text_emotion_review/xiaohongshu", "temp/banniu_37728/step_5_post_review_text_tags_review/xiaohongshu"),
         ],
-        platform_meta_config={
-            "xiaohongshu": {"meta_list_key": "xiaohongshu_post_meta_list", "title_keys": ["title"], "body_keys": ["desc"]},
-            "douyin": {"meta_list_key": "douyin_post_meta_list", "title_keys": ["title"], "body_keys": ["desc"]},
-        },
         tags_config={
             "Ace68Turbo": {
                 "迈从": ["迈从", "MCHose", "MC Hose"],
