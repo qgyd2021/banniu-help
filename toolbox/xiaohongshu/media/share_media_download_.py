@@ -24,6 +24,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from typing import Any, Dict, List, Optional, Tuple, Union
 from urllib.parse import parse_qs, urlparse
 
+import cacheout
 import requests
 
 from toolbox.utils.utils import when_error, when_expected_error, ExpectedError
@@ -57,7 +58,10 @@ class PostMeta(BaseModel):
     desc: str = Field(default="", description="正文/描述")
     tags: List[str] = Field(default_factory=list, description="标签列表")
 
-    user_id: str = Field(default="", description="作者 ID")
+    author_user_id: str = Field(default="", description="作者 userId")
+    unique_id: str = Field(default="", description="作者小红书号（与 user_id 相同）")
+
+    user_id: str = Field(default="", description="作者小红书号")
     nickname: str = Field(default="", description="作者昵称")
 
     liked_count: CountValue = Field(default="", description="点赞数（可能为 str/int）")
@@ -103,6 +107,15 @@ class ShareMediaDownload(ShareMediaDownloadRestful):
         r"https?://(?:www\.)?xiaohongshu\.com/[^\s]+",
         r"https?://(?:www\.)?rednote\.com/[^\s]+",
     ]
+
+    @cacheout.memoize(ttl=600)
+    def get_user_profile_state(self, author_user_id: str) -> Dict[str, Any]:
+        author_user_id = str(author_user_id or "").strip()
+        if not author_user_id:
+            raise AssertionError("author_user_id is empty")
+        url = f"https://www.xiaohongshu.com/user/profile/{author_user_id}"
+        html = self.get_text_by_url(url)
+        return self.parse_initial_state(html)
 
     @classmethod
     def get_share_url_by_share_text(cls, share_text: str) -> str:
@@ -154,6 +167,31 @@ class ShareMediaDownload(ShareMediaDownloadRestful):
         raw = re.sub(r"\bInfinity\b", "null", raw)
         return json.loads(raw)
 
+    @when_error(return_value=None)
+    def get_red_id_by_author_user_id(self, author_user_id: str) -> Optional[str]:
+        state = self.get_user_profile_state(author_user_id)
+        user_page_data = (state.get("user") or {}).get("userPageData") or {}
+        basic_info = user_page_data.get("basicInfo") or {}
+        red_id = str(basic_info.get("redId") or "").strip()
+        return red_id or None
+
+    @when_error(return_value=None)
+    def enrich_post_meta_user_info(self, post_meta: PostMeta) -> PostMeta:
+        author_user_id = str(post_meta.author_user_id or "").strip()
+        if not author_user_id:
+            return post_meta
+
+        user_id = str(post_meta.user_id or "").strip()
+        if user_id and user_id != author_user_id:
+            post_meta.unique_id = user_id
+            return post_meta
+
+        red_id = self.get_red_id_by_author_user_id(author_user_id)
+        if red_id:
+            post_meta.user_id = red_id
+            post_meta.unique_id = red_id
+        return post_meta
+
     def get_post_meta_by_share_text(self, share_text: str) -> dict:
         share_url = self.get_share_url_by_share_text(share_text)
         result = self.get_post_meta_by_share_url(share_url)
@@ -184,6 +222,7 @@ class ShareMediaDownload(ShareMediaDownloadRestful):
 
         post_meta.share_url = share_url
         post_meta.final_url = final_url
+        post_meta = self.enrich_post_meta_user_info(post_meta)
         return post_meta.to_dict()
 
     @when_error(return_value=None)
@@ -202,7 +241,7 @@ class ShareMediaDownload(ShareMediaDownloadRestful):
         post_meta.desc = re.sub(r"#([^#\[]+)\[[^\]]*\]#", "", note["desc"]).strip()
         post_meta.tags = [t["name"] for t in note["tagList"]]
 
-        post_meta.user_id = note["user"]["userId"]
+        post_meta.author_user_id = note["user"]["userId"]
         post_meta.nickname = note["user"]["nickname"]
 
         post_meta.liked_count = note["interactInfo"]["likedCount"]
@@ -229,7 +268,7 @@ class ShareMediaDownload(ShareMediaDownloadRestful):
         post_meta.desc = re.sub(r"#([^#\[]+)\[[^\]]*\]#", "", note["desc"]).strip()
         post_meta.tags = [t["name"] for t in note["tagList"]]
 
-        post_meta.user_id = note["user"]["userId"]
+        post_meta.author_user_id = note["user"]["userId"]
         post_meta.nickname = note["user"]["nickname"]
 
         post_meta.liked_count = note["interactInfo"]["likedCount"]

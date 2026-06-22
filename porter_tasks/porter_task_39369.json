@@ -1,6 +1,6 @@
 [
   {
-    "enable": true,
+    "enable": false,
     "type": "banniu_retrial_task_download",
     "project_id": "39369",
     "check_interval": 60,
@@ -351,7 +351,7 @@
     ]
   },
   {
-    "enable": true,
+    "enable": false,
     "type": "banniu_task_batch_update_by_condition",
     "check_interval": 60,
     "project_id": "39369",

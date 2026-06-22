@@ -8,6 +8,7 @@ import json
 import logging
 import os
 from pathlib import Path
+import platform
 from typing import List, Set, Tuple
 
 logger = logging.getLogger("toolbox")
@@ -294,6 +295,9 @@ class BanNiuRetrialTaskDownloadTask(BaseTask, TaskJsonUtils):
             flag=f"[{self.__class__.__name__}_ProjectId_{project_id}]",
             check_interval=check_interval
         )
+        if platform.system() in ("Windows", "Darwin"):
+            raise AssertionError(f"在 {platform.system()}平台上不能运行 retrial 任务。")
+
         self.time_zone_info = ZoneInfo(time_zone_info)
 
         self.project_id = str(project_id)
