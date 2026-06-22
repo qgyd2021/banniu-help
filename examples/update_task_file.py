@@ -11,10 +11,12 @@ import json
 import logging
 import os
 from pathlib import Path
+import sys
 from typing import Any, Dict, Optional
 
 project_path = os.path.abspath("../")
 project_path = Path(project_path)
+sys.path.append(project_path.as_posix())
 
 from toolbox.douyin.homepage.user_info import UserInfo as DouyinUserInfo
 from toolbox.xiaohongshu.homepage.user_info import UserInfo as XiaohongshuUserInfo
@@ -127,7 +129,7 @@ def update_task_file(task_file: Path, platform: str, client: Any, dry_run: bool)
 
 def main() -> None:
     """
-    python3 examples/update_task_file.py --platform xiaohongshu --task_dir /code/temp/banniu_39369/step_5_4_post_review_image_item_review --dry-run
+    python3 update_task_file.py --platform xiaohongshu --task_dir /code/temp/banniu_39369/step_5_4_post_review_image_item_review --dry-run
 
 
     :return:
