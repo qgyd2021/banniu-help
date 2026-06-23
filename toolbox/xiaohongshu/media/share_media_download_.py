@@ -22,7 +22,7 @@ import json
 import re
 from pydantic import BaseModel, ConfigDict, Field
 from typing import Any, Dict, List, Optional, Tuple, Union
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import parse_qs, urlencode, urlparse
 
 import requests
 
@@ -86,19 +86,30 @@ class ShareMediaDownloadRestful(object):
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
             "(KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
         ),
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
+        "Referer": "https://www.xiaohongshu.com/",
     }
 
-    def get_html_and_final_url_by_share_url(self, share_url: str) -> Tuple[str, str]:
-        response = requests.get(share_url, headers=self.headers,
-                                allow_redirects=True,
-                                timeout=30)
+    def __init__(self) -> None:
+        self._session = requests.Session()
+        self._session.headers.update(self.headers)
+
+    def warmup_session(self) -> None:
+        self._session.get("https://www.xiaohongshu.com/", allow_redirects=True, timeout=30)
+
+    def fetch_html_by_url(self, url: str) -> Tuple[str, str]:
+        response = self._session.get(url, allow_redirects=True, timeout=30)
         return response.text, response.url
 
+    def get_html_and_final_url_by_share_url(self, share_url: str) -> Tuple[str, str]:
+        self.warmup_session()
+        return self.fetch_html_by_url(share_url)
+
     def get_text_by_url(self, url: str) -> str:
-        response = requests.get(url, headers=self.headers, allow_redirects=True, timeout=30)
-        if response.status_code != 200:
-            raise AssertionError(f"request failed; status_code: {response.status_code}, url: {url}")
-        return response.text
+        self.warmup_session()
+        html, _ = self.fetch_html_by_url(url)
+        return html
 
 
 class ShareMediaDownload(ShareMediaDownloadRestful):
@@ -154,45 +165,159 @@ class ShareMediaDownload(ShareMediaDownloadRestful):
         raise AssertionError(f"未识别到小红书分享链接; text: {share_text!r}")
 
     @staticmethod
+    def extract_query_param(url: str, key: str) -> str:
+        return (parse_qs(urlparse(url).query).get(key) or [""])[0]
+
+    @classmethod
+    def is_blocked_page(cls, html: str, final_url: str = "") -> bool:
+        if not html:
+            return True
+        if "website-login/captcha" in final_url:
+            return True
+        if UserInfo.try_parse_initial_state(html) is not None:
+            return False
+        if len(html) < 50000:
+            return True
+        return False
+
+    @classmethod
+    def build_note_page_url_candidates(cls, share_url: str, final_url: str, note_id: str) -> List[str]:
+        candidates: List[str] = []
+
+        def add(url: str) -> None:
+            url = str(url or "").strip()
+            if url and url not in candidates:
+                candidates.append(url)
+
+        add(final_url)
+        add(share_url)
+
+        query_keys = ["xsec_token", "xsec_source", "source", "xhsshare"]
+        query: Dict[str, str] = {}
+        for key in query_keys:
+            value = cls.extract_query_param(share_url, key) or cls.extract_query_param(final_url, key)
+            if value:
+                query[key] = value
+        if "xsec_source" not in query:
+            query["xsec_source"] = "pc_share"
+
+        if note_id:
+            add(f"https://www.xiaohongshu.com/explore/{note_id}?{urlencode(query)}")
+            add(f"https://www.xiaohongshu.com/discovery/item/{note_id}?{urlencode(query)}")
+
+        return candidates
+
+    def iter_page_html_candidates(self, share_url: str) -> List[Tuple[str, str]]:
+        self.warmup_session()
+        first_html, first_final_url = self.fetch_html_by_url(share_url)
+        note_id = self.parse_note_id_from_urls(share_url, first_final_url)
+
+        candidates: List[Tuple[str, str]] = []
+        seen: set[Tuple[int, str]] = set()
+
+        def add_candidate(html: str, final_url: str) -> None:
+            key = (len(html), final_url)
+            if key in seen:
+                return
+            seen.add(key)
+            candidates.append((html, final_url))
+
+        for page_url in self.build_note_page_url_candidates(share_url, first_final_url, note_id):
+            html, landed_url = self.fetch_html_by_url(page_url)
+            add_candidate(html, landed_url)
+            if not self.is_blocked_page(html, landed_url):
+                break
+
+        if not candidates:
+            add_candidate(first_html, first_final_url)
+        return candidates
+
+    @classmethod
+    def parse_note_id_from_urls(cls, *urls: str) -> str:
+        for url in urls:
+            note_id = cls.parse_note_id_by_url(url)
+            if cls._is_valid_note_id(note_id):
+                return note_id
+        return ""
+
+    @staticmethod
+    def _is_valid_note_id(note_id: str) -> bool:
+        note_id = str(note_id or "").strip()
+        if not note_id:
+            return False
+        if note_id in {"captcha", "404", "website-login"}:
+            return False
+        return bool(re.fullmatch(r"[0-9a-fA-F]+", note_id))
+
+    @staticmethod
     def parse_note_id_by_url(url: str) -> str:
         """
         从落地页 URL 还原 ``note_id``。常见形式：
         - ``https://www.xiaohongshu.com/discovery/item/<note_id>?...``
         - ``https://www.xiaohongshu.com/explore/<note_id>?...``
         - 失效/拒绝时跳到 ``/404?noteId=<note_id>``。
+        - 验证码页 ``redirectPath`` 参数里带原始笔记地址。
         """
         parsed = urlparse(url)
         qs = parse_qs(parsed.query)
         note_id = (qs.get("noteId") or [""])[0]
         if note_id:
             return note_id
-        return parsed.path.strip("/").split("/")[-1]
+
+        redirect_path = (qs.get("redirectPath") or [""])[0]
+        if redirect_path:
+            return ShareMediaDownload.parse_note_id_by_url(redirect_path)
+
+        path_parts = [part for part in parsed.path.strip("/").split("/") if part]
+        if path_parts:
+            return path_parts[-1]
+        return ""
 
     def get_post_meta_by_share_text(self, share_text: str) -> dict:
         share_url = self.get_share_url_by_share_text(share_text)
         return self.get_post_meta_by_share_url(share_url)
 
-    @when_expected_error(return_value=None)
-    def get_post_meta_by_share_url(self, share_url: str) -> dict:
-        html, final_url = self.get_html_and_final_url_by_share_url(share_url)
-        note_id = self.parse_note_id_by_url(final_url)
-        state = UserInfo.parse_initial_state(html)
-        note = state["note"]["noteDetailMap"][note_id]["note"]
+    def _resolve_post_meta_by_share_url(self, share_url: str) -> Optional[PostMeta]:
+        post_meta = None
+        final_url = ""
+        for html, landed_url in self.iter_page_html_candidates(share_url):
+            if self.is_blocked_page(html, landed_url):
+                continue
+            state = UserInfo.try_parse_initial_state(html)
+            if state is None:
+                continue
 
-        note_type = note["type"]
-        if note_type == "normal":
-            post_meta = self.build_post_meta_from_note_branch_1(note)
-        elif note_type == "video":
-            post_meta = self.build_post_meta_from_note_branch_2(note)
-        else:
-            raise NotImplementedError(f"unknown note type: {note_type}")
+            note_id = self.parse_note_id_from_urls(landed_url, share_url)
+            if not note_id:
+                continue
+
+            note_detail_map = state["note"]["noteDetailMap"]
+            if note_id not in note_detail_map:
+                continue
+
+            note = note_detail_map[note_id]["note"]
+            note_type = note["type"]
+            if note_type == "normal":
+                post_meta = self.build_post_meta_from_note_branch_1(note)
+            elif note_type == "video":
+                post_meta = self.build_post_meta_from_note_branch_2(note)
+            else:
+                raise NotImplementedError(f"unknown note type: {note_type}")
+
+            if post_meta is not None:
+                final_url = landed_url
+                break
 
         if post_meta is None:
             return None
 
         post_meta.share_url = share_url
         post_meta.final_url = final_url
+        return post_meta
 
+    @when_expected_error(return_value=None)
+    def get_post_meta_by_share_url(self, share_url: str) -> dict:
+        post_meta = self._resolve_post_meta_by_share_url(share_url)
         if post_meta is None:
             raise ExpectedError(status_code=60500, message=f"未成功解析到信息；share_url: {share_url}")
 
