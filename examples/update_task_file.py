@@ -129,7 +129,11 @@ def update_task_file(task_file: Path, platform: str, client: Any, dry_run: bool)
 
 def main() -> None:
     """
-    python3 update_task_file.py --platform xiaohongshu --task_dir /code/temp/banniu_39369/step_5_4_post_review_image_item_review --dry-run
+    python3 update_task_file.py xiaohongshu /code/temp/banniu_39369/step_5_4_post_review_image_item_review/xiaohongshu --recursive
+    python3 update_task_file.py douyin /code/temp/banniu_39369/step_5_4_post_review_image_item_review/douyin --recursive
+
+    python3 update_task_file.py xiaohongshu /code/temp/banniu_39369/step_5_2_post_review_text_length_review/xiaohongshu --recursive
+    python3 update_task_file.py douyin /code/temp/banniu_39369/step_5_2_post_review_text_length_review/douyin --recursive
 
 
     :return:

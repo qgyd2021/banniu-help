@@ -1,6 +1,6 @@
 [
   {
-    "enable": false,
+    "enable": true,
     "type": "banniu_retrial_task_download",
     "project_id": "39369",
     "check_interval": 60,
@@ -123,13 +123,28 @@
   },
   {
     "enable": true,
+    "type": "banniu_task_batch_update",
+    "check_interval": 60,
+    "project_id": "39369",
+    "app_id": "41339",
+    "platform_to_dirs": [
+      ["douyin", "temp/banniu_39369/step_3_douyin_share_media_download/tasks", "temp/banniu_39369/step_3_douyin_share_media_download/tasks_2"],
+      ["xiaohongshu", "temp/banniu_39369/step_3_xiaohongshu_share_media_download/tasks", "temp/banniu_39369/step_3_xiaohongshu_share_media_download/tasks_2"]
+    ],
+    "column_name_to_key": {
+      "抖音号或小红书号": "{{ post_meta.user_id }}"
+    },
+    "batch_size": 200
+  },
+  {
+    "enable": true,
     "type": "post_review_duplicate_review",
     "check_interval": 60,
     "post_duplicate_file": "temp/banniu_39369/post_duplicate.jsonl",
     "platform_to_dirs": [
-      ["xiaohongshu", "temp/banniu_39369/step_3_xiaohongshu_share_media_download/tasks", "temp/banniu_39369/step_4_post_review_duplicate_review/xiaohongshu"],
       ["dewu", "temp/banniu_39369/step_3_dewu_share_media_download/tasks", "temp/banniu_39369/step_4_post_review_duplicate_review/dewu"],
-      ["douyin", "temp/banniu_39369/step_3_douyin_share_media_download/tasks", "temp/banniu_39369/step_4_post_review_duplicate_review/douyin"],
+      ["douyin", "temp/banniu_39369/step_3_douyin_share_media_download/tasks_2", "temp/banniu_39369/step_4_post_review_duplicate_review/douyin"],
+      ["xiaohongshu", "temp/banniu_39369/step_3_xiaohongshu_share_media_download/tasks_2", "temp/banniu_39369/step_4_post_review_duplicate_review/xiaohongshu"],
       ["kuaishou", "temp/banniu_39369/step_3_kuaishou_share_media_download/tasks", "temp/banniu_39369/step_4_post_review_duplicate_review/kuaishou"],
       ["bilibili", "temp/banniu_39369/step_3_bilibili_share_media_download/tasks", "temp/banniu_39369/step_4_post_review_duplicate_review/bilibili"],
       ["xiaoheihe", "temp/banniu_39369/step_3_xiaoheihe_share_media_download/tasks", "temp/banniu_39369/step_4_post_review_duplicate_review/xiaoheihe"],
@@ -351,7 +366,7 @@
     ]
   },
   {
-    "enable": false,
+    "enable": true,
     "type": "banniu_task_batch_update_by_condition",
     "check_interval": 60,
     "project_id": "39369",

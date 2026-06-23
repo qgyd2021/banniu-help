@@ -15,16 +15,17 @@ docker build -t banniu-help:v20260603_1506 .
 docker build -t banniu-help:v20260609_1133 .
 docker build -t banniu-help:v20260609_1212 .
 docker build -t banniu-help:v20260622_1012 .
-docker build -t banniu-help:v20260622_1812 .
+docker build -t banniu-help:v20260622_1814 .
 
 docker stop BanniuHelp && docker rm BanniuHelp
 
 docker run -d \
---name BanniuHelp \
+--name BanniuHelp_7860 \
+-e server_port=7860 \
 --network host \
 --restart always \
 -v /home/honeytian/PycharmProjects/banniu-help/temp:/code/temp \
-banniu-help:v20260622_1812
+banniu-help:v20260622_1814
 
 
 ```
