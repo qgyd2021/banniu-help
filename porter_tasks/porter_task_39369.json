@@ -132,7 +132,10 @@
       ["xiaohongshu", "temp/banniu_39369/step_3_xiaohongshu_share_media_download/tasks", "temp/banniu_39369/step_3_xiaohongshu_share_media_download/tasks_2"]
     ],
     "column_name_to_key": {
-      "抖音号或小红书号": "{{ post_meta.user_id }}"
+      "抖音号或小红书号": {
+        "template": "{{ post_meta.user_id }}",
+        "skip_if_empty": true
+      }
     },
     "batch_size": 200
   },

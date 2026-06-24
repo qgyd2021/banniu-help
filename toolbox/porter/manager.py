@@ -53,8 +53,7 @@ def get_args():
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--porter_task_file",
-        # default=(project_path / "porter_tasks/porter_task_37728.json").as_posix(),
-        default=(project_path / "porter_tasks/porter_task_37728_v2.json").as_posix(),
+        default=(project_path / "porter_tasks/porter_task_39369.json").as_posix(),
         type=str
     )
     args = parser.parse_args()
