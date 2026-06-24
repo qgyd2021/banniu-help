@@ -47,10 +47,23 @@ class UserInfoRestful(object):
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
             "(KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
         ),
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
+        "Referer": "https://www.xiaohongshu.com/",
     }
 
+    def __init__(self) -> None:
+        self._session = requests.Session()
+        self._session.headers.update(self.headers)
+
+    def adopt_session_cookies(self, cookies: requests.cookies.RequestsCookieJar) -> None:
+        self._session.cookies.update(cookies)
+
+    def warmup_session(self) -> None:
+        self._session.get("https://www.xiaohongshu.com/", allow_redirects=True, timeout=30)
+
     def get_text_by_url(self, url: str) -> str:
-        response = requests.get(url, headers=self.headers, allow_redirects=True, timeout=30)
+        response = self._session.get(url, allow_redirects=True, timeout=30)
         if response.status_code != 200:
             raise AssertionError(
                 f"request failed; status_code: {response.status_code}, text: {response.text}, url: {url}"
@@ -66,6 +79,21 @@ class UserInfoRestful(object):
 
 
 class UserInfo(UserInfoRestful):
+    @staticmethod
+    def _extract_profile_basic_info(state: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        user_section = state.get("user")
+        if not isinstance(user_section, dict):
+            return None
+        user_page_data = user_section.get("userPageData")
+        if not isinstance(user_page_data, dict):
+            return None
+        basic_info = user_page_data.get("basicInfo")
+        if not isinstance(basic_info, dict):
+            return None
+        if not str(basic_info.get("redId") or "").strip():
+            return None
+        return basic_info
+
     @staticmethod
     def parse_initial_state(html: str) -> Dict[str, Any]:
         marker = "window.__INITIAL_STATE__="
@@ -89,7 +117,13 @@ class UserInfo(UserInfoRestful):
             raise ExpectedError(status_code=60500, message="author_user_id is empty")
         profile_url = self.build_user_profile_url(author_user_id)
         html = self.get_text_by_url(profile_url)
-        return self.parse_initial_state(html)
+        state = self.parse_initial_state(html)
+        if self._extract_profile_basic_info(state) is None:
+            raise ExpectedError(
+                status_code=60500,
+                message=f"profile basicInfo invalid; author_user_id: {author_user_id}",
+            )
+        return state
 
     @when_error(return_value=None)
     def build_user_meta_from_profile_state_branch_1(
@@ -97,16 +131,20 @@ class UserInfo(UserInfoRestful):
         state: Dict[str, Any],
         author_user_id: str = "",
     ) -> UserMeta:
+        basic_info = self._extract_profile_basic_info(state)
+        if basic_info is None:
+            return None
+
         user_meta = UserMeta()
         user_meta.source = "build_user_meta_from_profile_state_branch_1"
 
-        basic_info = state["user"]["userPageData"]["basicInfo"]
         user_meta.author_user_id = str(author_user_id)
         user_meta.unique_id = str(basic_info["redId"])
-        user_meta.nickname = str(basic_info["nickname"])
+        user_meta.nickname = str(basic_info.get("nickname") or "")
         user_meta.signature = str(basic_info.get("desc") or "")
 
-        interactions = state["user"]["userPageData"].get("interactions")
+        user_page_data = state["user"]["userPageData"]
+        interactions = user_page_data.get("interactions")
         if isinstance(interactions, list):
             for item in interactions:
                 if not isinstance(item, dict):

@@ -9,20 +9,22 @@ toolbox/douyin/media/share_media_download_.py 风格对齐）。
 
 1. 从分享文案中抓出一条小红书分享入口链接
    （xhslink.com 短链 / xiaohongshu.com / rednote.com）；
-2. 跟跳到落地页（一般是 ``https://www.xiaohongshu.com/discovery/item/<note_id>?...``
-   或 ``/explore/<note_id>?...``）；
-3. 从 HTML 内嵌脚本中抽出 ``window.__INITIAL_STATE__`` JSON；
-4. 在 ``note.noteDetailMap[note_id].note`` 中取该笔记数据；
-5. 根据 ``note["type"]`` 分支：
-   - ``normal``：图文笔记（分支 1）；
-   - ``video``：视频笔记（分支 2）；
-6. 映射到统一的 ``PostMeta``。
+2. 跟跳到落地页（一般是 ``discovery/item`` 或 ``explore``）；
+3. 从 HTML 内嵌 ``window.__INITIAL_STATE__`` 取笔记数据：
+   - PC ``explore``：``note.noteDetailMap[note_id].note``（分支 1 / 2）；
+   - 移动端 H5 ``discovery/item``：``noteData.data.noteData``（分支 3 / 4）；
+4. 映射到统一的 ``PostMeta``。
+
+说明：同一链接在无痕/未登录场景下，PC 侧可能间歇性落到 ``/404``，
+移动端 H5 相对稳定，但也不是 100% 成功。本模块只做单次解析尝试
+（含 PC/移动端 UA 与若干 URL 候选，属于不同抓取路径而非重试），
+若失败由调用方自行决定何时再次调用。
 """
 import json
 import re
 from pydantic import BaseModel, ConfigDict, Field
 from typing import Any, Dict, List, Optional, Tuple, Union
-from urllib.parse import parse_qs, urlencode, urlparse
+from urllib.parse import parse_qs, urlencode, urlparse, urljoin
 
 import requests
 
@@ -81,7 +83,7 @@ class PostMeta(BaseModel):
 
 
 class ShareMediaDownloadRestful(object):
-    headers = {
+    windows_headers = {
         "User-Agent": (
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
             "(KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
@@ -90,16 +92,33 @@ class ShareMediaDownloadRestful(object):
         "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
         "Referer": "https://www.xiaohongshu.com/",
     }
+    iphone_headers = {
+        "User-Agent": (
+            "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) "
+            "AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1"
+        ),
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
+        "Referer": "https://www.xiaohongshu.com/",
+    }
 
     def __init__(self) -> None:
         self._session = requests.Session()
-        self._session.headers.update(self.headers)
+        self._session.headers.update(self.windows_headers)
+
+    def _request_headers(self, use_iphone: bool) -> Dict[str, str]:
+        return self.iphone_headers if use_iphone else self.windows_headers
 
     def warmup_session(self) -> None:
         self._session.get("https://www.xiaohongshu.com/", allow_redirects=True, timeout=30)
 
-    def fetch_html_by_url(self, url: str) -> Tuple[str, str]:
-        response = self._session.get(url, allow_redirects=True, timeout=30)
+    def fetch_html_by_url(self, url: str, use_iphone: bool = False) -> Tuple[str, str]:
+        response = requests.get(
+            url,
+            headers=self._request_headers(use_iphone),
+            allow_redirects=True,
+            timeout=30,
+        )
         return response.text, response.url
 
     def get_html_and_final_url_by_share_url(self, share_url: str) -> Tuple[str, str]:
@@ -110,6 +129,27 @@ class ShareMediaDownloadRestful(object):
         self.warmup_session()
         html, _ = self.fetch_html_by_url(url)
         return html
+
+    def trace_redirect_urls(self, url: str, max_hops: int = 10, use_iphone: bool = False) -> List[str]:
+        headers = self._request_headers(use_iphone)
+        urls: List[str] = []
+        cur = url
+        for _ in range(max_hops):
+            urls.append(cur)
+            response = requests.get(
+                cur,
+                headers=headers,
+                allow_redirects=False,
+                timeout=30,
+            )
+            if response.status_code in (301, 302, 303, 307, 308):
+                location = response.headers.get("Location")
+                if not location:
+                    break
+                cur = urljoin(cur, location)
+                continue
+            break
+        return urls
 
 
 class ShareMediaDownload(ShareMediaDownloadRestful):
@@ -122,6 +162,24 @@ class ShareMediaDownload(ShareMediaDownloadRestful):
     def __init__(self) -> None:
         super().__init__()
         self.user_info = UserInfo()
+
+    @staticmethod
+    def pick_unique_id_from_note_user(user: dict) -> str:
+        if not isinstance(user, dict):
+            return ""
+        for key in ("redId", "red_id"):
+            value = str(user.get(key) or "").strip()
+            if value:
+                return value
+        return ""
+
+    @staticmethod
+    def apply_note_user_to_post_meta(post_meta: PostMeta, user: dict) -> PostMeta:
+        unique_id = ShareMediaDownload.pick_unique_id_from_note_user(user)
+        if unique_id:
+            post_meta.unique_id = unique_id
+            post_meta.user_id = unique_id
+        return post_meta
 
     @staticmethod
     def apply_user_meta_to_post_meta(
@@ -144,6 +202,10 @@ class ShareMediaDownload(ShareMediaDownloadRestful):
         author_user_id = str(post_meta.author_user_id or "").strip()
         if not author_user_id:
             return None
+        if post_meta.user_id:
+            return None
+        self.user_info.adopt_session_cookies(self._session.cookies)
+        self.user_info.warmup_session()
         user_meta_dict = self.user_info.get_user_meta_by_author_user_id(author_user_id)
         if user_meta_dict is None:
             return None
@@ -168,20 +230,84 @@ class ShareMediaDownload(ShareMediaDownloadRestful):
     def extract_query_param(url: str, key: str) -> str:
         return (parse_qs(urlparse(url).query).get(key) or [""])[0]
 
+    @staticmethod
+    def parse_initial_state(html: str) -> Optional[Dict[str, Any]]:
+        marker = "window.__INITIAL_STATE__="
+        start = html.find(marker)
+        if start < 0:
+            return None
+        start += len(marker)
+        end = html.find("</script>", start)
+        if end < 0:
+            return None
+        raw = html[start:end].strip()
+        if not raw:
+            return None
+        raw = re.sub(r"\bundefined\b", "null", raw)
+        raw = re.sub(r"\bNaN\b", "null", raw)
+        raw = re.sub(r"\bInfinity\b", "null", raw)
+        try:
+            return json.loads(raw)
+        except json.JSONDecodeError:
+            return None
+
+    @classmethod
+    def pick_note_from_state(cls, state: Dict[str, Any], note_id: str) -> Optional[dict]:
+        note_section = state.get("note")
+        if isinstance(note_section, dict):
+            note_detail_map = note_section.get("noteDetailMap")
+            if isinstance(note_detail_map, dict):
+                if note_id in note_detail_map:
+                    note = note_detail_map[note_id]["note"]
+                    if note.get("noteId"):
+                        return note
+                for key, block in note_detail_map.items():
+                    if key in ("null", ""):
+                        continue
+                    note = block["note"]
+                    if note.get("noteId"):
+                        return note
+
+        note_data_root = state.get("noteData")
+        if isinstance(note_data_root, dict):
+            data = note_data_root.get("data")
+            if isinstance(data, dict):
+                mobile_note = data.get("noteData")
+                if isinstance(mobile_note, dict) and mobile_note.get("noteId"):
+                    return mobile_note
+
+        return None
+
+    @staticmethod
+    def is_mobile_h5_note(note: dict) -> bool:
+        user = note.get("user")
+        return isinstance(user, dict) and "nickName" in user
+
+    @classmethod
+    def has_valid_note_in_state(cls, state: Dict[str, Any], note_id: str = "") -> bool:
+        return cls.pick_note_from_state(state, note_id) is not None
+
     @classmethod
     def is_blocked_page(cls, html: str, final_url: str = "") -> bool:
         if not html:
             return True
         if "website-login/captcha" in final_url:
             return True
-        if UserInfo.parse_initial_state(html) is not None:
-            return False
-        if len(html) < 50000:
+        if "/404" in final_url:
             return True
-        return False
+        state = cls.parse_initial_state(html)
+        if state is None:
+            return len(html) < 50000
+        return not cls.has_valid_note_in_state(state)
 
     @classmethod
-    def build_note_page_url_candidates(cls, share_url: str, final_url: str, note_id: str) -> List[str]:
+    def build_note_page_url_candidates(
+        cls,
+        share_url: str,
+        final_url: str,
+        note_id: str,
+        redirect_urls: Optional[List[str]] = None,
+    ) -> List[str]:
         candidates: List[str] = []
 
         def add(url: str) -> None:
@@ -191,13 +317,18 @@ class ShareMediaDownload(ShareMediaDownloadRestful):
 
         add(final_url)
         add(share_url)
+        for redirect_url in redirect_urls or []:
+            add(redirect_url)
 
         query_keys = ["xsec_token", "xsec_source", "source", "xhsshare"]
         query: Dict[str, str] = {}
+        source_urls = [share_url, final_url, *(redirect_urls or [])]
         for key in query_keys:
-            value = cls.extract_query_param(share_url, key) or cls.extract_query_param(final_url, key)
-            if value:
-                query[key] = value
+            for source_url in source_urls:
+                value = cls.extract_query_param(source_url, key)
+                if value:
+                    query[key] = value
+                    break
         if "xsec_source" not in query:
             query["xsec_source"] = "pc_share"
 
@@ -209,8 +340,15 @@ class ShareMediaDownload(ShareMediaDownloadRestful):
 
     def iter_page_html_candidates(self, share_url: str) -> List[Tuple[str, str]]:
         self.warmup_session()
-        first_html, first_final_url = self.fetch_html_by_url(share_url)
-        note_id = self.parse_note_id_from_urls(share_url, first_final_url)
+        redirect_urls_pc = self.trace_redirect_urls(share_url, use_iphone=False)
+        redirect_urls_iphone = self.trace_redirect_urls(share_url, use_iphone=True)
+        redirect_urls: List[str] = []
+        for redirect_url in redirect_urls_pc + redirect_urls_iphone:
+            if redirect_url not in redirect_urls:
+                redirect_urls.append(redirect_url)
+
+        first_html, first_final_url = self.fetch_html_by_url(share_url, use_iphone=True)
+        note_id = self.parse_note_id_from_urls(share_url, first_final_url, *redirect_urls)
 
         candidates: List[Tuple[str, str]] = []
         seen: set[Tuple[int, str]] = set()
@@ -222,10 +360,20 @@ class ShareMediaDownload(ShareMediaDownloadRestful):
             seen.add(key)
             candidates.append((html, final_url))
 
-        for page_url in self.build_note_page_url_candidates(share_url, first_final_url, note_id):
-            html, landed_url = self.fetch_html_by_url(page_url)
-            add_candidate(html, landed_url)
-            if not self.is_blocked_page(html, landed_url):
+        for page_url in self.build_note_page_url_candidates(
+            share_url,
+            first_final_url,
+            note_id,
+            redirect_urls=redirect_urls,
+        ):
+            resolved = False
+            for use_iphone in (True, False):
+                html, landed_url = self.fetch_html_by_url(page_url, use_iphone=use_iphone)
+                add_candidate(html, landed_url)
+                if not self.is_blocked_page(html, landed_url):
+                    resolved = True
+                    break
+            if resolved:
                 break
 
         if not candidates:
@@ -283,21 +431,24 @@ class ShareMediaDownload(ShareMediaDownloadRestful):
         for html, landed_url in self.iter_page_html_candidates(share_url):
             if self.is_blocked_page(html, landed_url):
                 continue
-            state = UserInfo.parse_initial_state(html)
+            state = self.parse_initial_state(html)
             if state is None:
                 continue
 
             note_id = self.parse_note_id_from_urls(landed_url, share_url)
-            if not note_id:
+            note = self.pick_note_from_state(state, note_id)
+            if note is None:
                 continue
 
-            note_detail_map = state["note"]["noteDetailMap"]
-            if note_id not in note_detail_map:
-                continue
-
-            note = note_detail_map[note_id]["note"]
             note_type = note["type"]
-            if note_type == "normal":
+            if self.is_mobile_h5_note(note):
+                if note_type == "normal":
+                    post_meta = self.build_post_meta_from_note_branch_3(note)
+                elif note_type == "video":
+                    post_meta = self.build_post_meta_from_mobile_video_branch_4(note)
+                else:
+                    raise NotImplementedError(f"unknown note type: {note_type}")
+            elif note_type == "normal":
                 post_meta = self.build_post_meta_from_note_branch_1(note)
             elif note_type == "video":
                 post_meta = self.build_post_meta_from_note_branch_2(note)
@@ -343,6 +494,7 @@ class ShareMediaDownload(ShareMediaDownloadRestful):
 
         post_meta.author_user_id = note["user"]["userId"]
         post_meta.nickname = note["user"]["nickname"]
+        post_meta = self.apply_note_user_to_post_meta(post_meta, note["user"])
 
         post_meta.liked_count = note["interactInfo"]["likedCount"]
         post_meta.collected_count = note["interactInfo"]["collectedCount"]
@@ -370,6 +522,7 @@ class ShareMediaDownload(ShareMediaDownloadRestful):
 
         post_meta.author_user_id = note["user"]["userId"]
         post_meta.nickname = note["user"]["nickname"]
+        post_meta = self.apply_note_user_to_post_meta(post_meta, note["user"])
 
         post_meta.liked_count = note["interactInfo"]["likedCount"]
         post_meta.collected_count = note["interactInfo"]["collectedCount"]
@@ -381,20 +534,72 @@ class ShareMediaDownload(ShareMediaDownloadRestful):
         post_meta.video_urls = [VideoMeta(cover_url=cover_url, video_url=video_url)]
         return post_meta
 
+    @when_error(return_value=None)
+    def build_post_meta_from_note_branch_3(self, note: dict) -> Optional[PostMeta]:
+        """
+        移动端 H5 discovery/item；数据在 noteData.data.noteData。
+        http://xhslink.com/o/3ELE15UPkMy
+        """
+        post_meta = PostMeta()
+        post_meta.post_type = "build_post_meta_from_note_branch_3"
+
+        post_meta.post_id = note["noteId"]
+        post_meta.title = note["title"]
+        post_meta.desc = re.sub(r"#([^#\[]+)\[[^\]]*\]#", "", note["desc"]).strip()
+        post_meta.tags = [t["name"] for t in note["tagList"]]
+
+        post_meta.author_user_id = note["user"]["userId"]
+        post_meta.nickname = note["user"]["nickName"]
+        post_meta = self.apply_note_user_to_post_meta(post_meta, note["user"])
+
+        interact = note["interactInfo"]
+        post_meta.liked_count = interact["likedCount"]
+        post_meta.collected_count = interact["collectedCount"]
+        post_meta.comment_count = interact["commentCount"]
+        post_meta.share_count = interact["shareCount"]
+
+        post_meta.image_urls = [image["url"] for image in note["imageList"]]
+        return post_meta
+
+    @when_error(return_value=None)
+    def build_post_meta_from_mobile_video_branch_4(self, note: dict) -> Optional[PostMeta]:
+        post_meta = PostMeta()
+        post_meta.post_type = "build_post_meta_from_mobile_video_branch_4"
+
+        post_meta.post_id = note["noteId"]
+        post_meta.title = note["title"]
+        post_meta.desc = re.sub(r"#([^#\[]+)\[[^\]]*\]#", "", note["desc"]).strip()
+        post_meta.tags = [t["name"] for t in note["tagList"]]
+
+        post_meta.author_user_id = note["user"]["userId"]
+        post_meta.nickname = note["user"]["nickName"]
+        post_meta = self.apply_note_user_to_post_meta(post_meta, note["user"])
+
+        interact = note["interactInfo"]
+        post_meta.liked_count = interact["likedCount"]
+        post_meta.collected_count = interact["collectedCount"]
+        post_meta.comment_count = interact["commentCount"]
+        post_meta.share_count = interact["shareCount"]
+
+        cover_url = note["imageList"][0]["url"]
+        video_url = note["video"]["media"]["stream"]["h264"][0]["masterUrl"]
+        post_meta.video_urls = [VideoMeta(cover_url=cover_url, video_url=video_url)]
+        return post_meta
+
 
 def main() -> None:
     """
     示例：
-    - 短链：http://xhslink.com/o/8ekDPRNcz63
-      （注：xhslink 短链对应的笔记下线后会重定向到 /404，导致解析失败，
-       这种情况是数据本身的问题，不是代码问题。）
+    - 短链：http://xhslink.com/o/3ELE15UPkMy
     - 长链：https://www.xiaohongshu.com/explore/<note_id>?xsec_token=...&xsec_source=pc_share
+
+    若偶发解析失败（平台间歇性返回 /404），由调用方稍后重试即可。
     """
     client = ShareMediaDownload()
 
     share_text = """
 
-        https://www.xiaohongshu.com/discovery/item/69f5ce1f0000000023017c00?source=webshare&xhsshare=pc_web&xsec_token=ABlhx3-jH590AcirWbCOkw7vyiuwHKMJRzcp1BMFYIpfo=&xsec_source=pc_share
+http://xhslink.com/o/8v8r0Keqsk4 把这段复制下来，打开【小红书】就能看到精彩笔记。
 
 """
     post_meta = client.get_post_meta_by_share_text(share_text)

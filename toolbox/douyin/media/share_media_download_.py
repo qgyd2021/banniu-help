@@ -5,6 +5,7 @@ import hashlib
 import logging
 import re
 import json
+import sys
 from urllib.parse import urlparse
 from pydantic import BaseModel, ConfigDict, Field
 from typing import Any, Dict, Iterator, List, Optional, Tuple, Union
@@ -295,7 +296,12 @@ class ShareMediaDownload(ShareMediaDownloadRestful):
         self.user_info = UserInfo()
 
     @staticmethod
-    def apply_user_meta_to_post_meta(post_meta: PostMeta, user_meta: UserMeta) -> PostMeta:
+    def apply_user_meta_to_post_meta(
+        post_meta: PostMeta,
+        user_meta: Optional[UserMeta],
+    ) -> PostMeta:
+        if user_meta is None:
+            return post_meta
         if user_meta.author_user_id:
             post_meta.author_user_id = str(user_meta.author_user_id)
         if user_meta.sec_uid:
@@ -386,20 +392,25 @@ class ShareMediaDownload(ShareMediaDownloadRestful):
         js = json.loads(raw)
         return js
 
-    def get_aweme_type_and_id_by_final_url(self, final_url: str):
+    def get_aweme_type_and_id_by_final_url(self, final_url: str) -> Tuple[str, str]:
         match = re.search(r"/(video|note|slides)/(\d+)", final_url)
         if match is not None:
-            aweme_type = match.group(1)
-            aweme_id = match.group(2)
-        else:
-            # https://www.douyin.com/user/self?modal_id=7641810785078360165
-            match = re.search(r"/self?modal_id=(\d+)", final_url)
-            aweme_type = "note"
-            aweme_id = match.group(1)
-        if match is None:
-            raise AssertionError(f"can not parse aweme_type and aweme_id; final_url: {final_url}")
+            return match.group(1), match.group(2)
 
-        return aweme_type, aweme_id
+        match = re.search(r"[?&]modal_id=(\d+)", final_url)
+        if match is not None:
+            return "note", match.group(1)
+
+        if re.search(r"(?:jinritemai|haohuo)\.", final_url, re.I):
+            raise ExpectedError(
+                status_code=60500,
+                message=f"该链接为抖音商城商品页，非视频/图文作品；final_url: {final_url}",
+            )
+
+        raise ExpectedError(
+            status_code=60500,
+            message=f"无法从落地页解析 aweme_id；final_url: {final_url}",
+        )
 
     def get_post_meta_by_share_text(self, share_text: str) -> dict:
         share_url = self.get_share_url_by_share_text(share_text)
@@ -741,13 +752,14 @@ def main() -> None:
 
     share_text = """
 
-1.00 # 鼠标推荐 # 电竞鼠标升级 # 新的鼠标 https://v.douyin.com/bex4cW-lzxw/ 复制此链接，打开抖音搜索，直接观看视频！ n@D.Hi Yzt:/ :1pm 07/08
-
+9.79 # 迈从ace68 v2超竟版  https://v.douyin.com/URlpJmI78MI/ 复制此链接，打开抖音搜索，直接观看视频！ trR:/ :8pm 04/02 b@a.an
 
 """
     post_meta = client.get_post_meta_by_share_text(share_text)
     print("post_meta:")
-    print(json.dumps(post_meta, ensure_ascii=False, indent=2))
+    sys.stdout.buffer.write(
+        (json.dumps(post_meta, ensure_ascii=False, indent=2) + "\n").encode("utf-8")
+    )
 
 
 if __name__ == "__main__":
