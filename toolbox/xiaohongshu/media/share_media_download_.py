@@ -174,7 +174,7 @@ class ShareMediaDownload(ShareMediaDownloadRestful):
             return True
         if "website-login/captcha" in final_url:
             return True
-        if UserInfo.try_parse_initial_state(html) is not None:
+        if UserInfo.parse_initial_state(html) is not None:
             return False
         if len(html) < 50000:
             return True
@@ -283,7 +283,7 @@ class ShareMediaDownload(ShareMediaDownloadRestful):
         for html, landed_url in self.iter_page_html_candidates(share_url):
             if self.is_blocked_page(html, landed_url):
                 continue
-            state = UserInfo.try_parse_initial_state(html)
+            state = UserInfo.parse_initial_state(html)
             if state is None:
                 continue
 

@@ -67,13 +67,6 @@ class UserInfoRestful(object):
 
 class UserInfo(UserInfoRestful):
     @staticmethod
-    def try_parse_initial_state(html: str) -> Optional[Dict[str, Any]]:
-        try:
-            return UserInfo.parse_initial_state(html)
-        except (AssertionError, json.JSONDecodeError):
-            return None
-
-    @staticmethod
     def parse_initial_state(html: str) -> Dict[str, Any]:
         marker = "window.__INITIAL_STATE__="
         start = html.find(marker)

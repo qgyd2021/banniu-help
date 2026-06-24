@@ -196,6 +196,10 @@
       ["weibo", "temp/banniu_39369/step_5_2_post_review_text_length_review/weibo", "temp/banniu_39369/step_5_3_post_review_text_tags_review/weibo"]
     ],
     "tags_config": {
+      "Ace75": {
+        "迈从": ["迈从", "MCHose", "MC Hose"],
+        "迈从Ace75": ["迈从Ace75", "迈从 Ace75", "Ace75"]
+      },
       "Ace68Turbo": {
         "迈从": ["迈从", "MCHose", "MC Hose"],
         "迈从Ace68Turbo": ["迈从Ace68Turbo", "迈从 Ace68Turbo", "Ace68Turbo"]
@@ -227,6 +231,14 @@
       "K99V3": {
         "迈从": ["迈从", "MCHose", "MC Hose"],
         "迈从K99V3": ["迈从K99V3", "迈从 K99V3", "K99V3"]
+      },
+      "K7V2": {
+        "迈从": ["迈从", "MCHose", "MC Hose"],
+        "迈从K7V2": ["迈从K7V2", "迈从 K7V2", "K7V2"]
+      },
+      "G98V3": {
+        "迈从": ["迈从", "MCHose", "MC Hose"],
+        "迈从G98V3": ["迈从G98V3", "迈从 G98V3", "G98V3"]
       }
     }
   },
@@ -279,6 +291,7 @@
       "positive_emotion_labels": ["积极", "中性"],
       "min_total_text_length": 10,
       "required_tags_dict": {
+        "Ace75": ["迈从", "迈从Ace75"],
         "Ace68Turbo": ["迈从", "迈从Ace68Turbo"],
         "Ace68GT": ["迈从", "迈从Ace68GT"],
         "Ace68Air 2": ["迈从", "迈从Ace68Air2"],
@@ -286,9 +299,12 @@
         "Ace68V2": ["迈从", "迈从ACE68v2"],
         "K20GT": ["迈从", "迈从K20GT"],
         "A7V3": ["迈从", "迈从A7V3"],
-        "K99V3": ["迈从", "迈从K99V3"]
+        "K99V3": ["迈从", "迈从K99V3"],
+        "K7V2": ["迈从", "迈从K7V2"],
+        "G98V3": ["迈从", "迈从G98V3"]
       },
       "required_image_item_dict": {
+        "Ace75":["keyboard"],
         "Ace68Turbo":["keyboard"],
         "Ace68GT": ["keyboard"],
         "Ace68Air 2": ["keyboard"],
@@ -296,7 +312,10 @@
         "Ace68V2": ["keyboard"],
         "K20GT": [],
         "A7V3": ["mouse"],
-        "K99V3": ["keyboard"]
+        "K99V3": ["keyboard"],
+        "K7V2": ["mouse"],
+        "A5V3Ultra+（3955版本）": ["mouse"],
+        "G98V3": ["keyboard"]
       },
       "min_image_count": 1,
       "max_image_cross_rate": 0.5,
@@ -337,6 +356,7 @@
       "positive_emotion_labels": ["积极", "中性"],
       "min_total_text_length": 10,
       "required_tags_dict": {
+        "Ace75": ["迈从", "迈从Ace75"],
         "Ace68Turbo": ["迈从", "迈从Ace68Turbo"],
         "Ace68GT": ["迈从", "迈从Ace68GT"],
         "Ace68Air 2": ["迈从", "迈从Ace68Air2"],
@@ -344,9 +364,12 @@
         "Ace68V2": ["迈从", "迈从ACE68v2"],
         "K20GT": ["迈从", "迈从K20GT"],
         "A7V3": ["迈从", "迈从A7V3"],
-        "K99V3": ["迈从", "迈从K99V3"]
+        "K99V3": ["迈从", "迈从K99V3"],
+        "K7V2": ["迈从", "迈从K7V2"],
+        "G98V3": ["迈从", "迈从G98V3"]
       },
       "required_image_item_dict": {
+        "Ace75":["keyboard"],
         "Ace68Turbo":["keyboard"],
         "Ace68GT": ["keyboard"],
         "Ace68Air 2": ["keyboard"],
@@ -354,7 +377,10 @@
         "Ace68V2": ["keyboard"],
         "K20GT": [],
         "A7V3": ["mouse"],
-        "K99V3": ["keyboard"]
+        "K99V3": ["keyboard"],
+        "K7V2": ["mouse"],
+        "A5V3Ultra+（3955版本）": ["mouse"],
+        "G98V3": ["keyboard"]
       },
       "min_image_count": 1,
       "max_image_cross_rate": 0.5,

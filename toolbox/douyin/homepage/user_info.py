@@ -10,6 +10,7 @@ import requests
 from pydantic import BaseModel, ConfigDict, Field
 
 from toolbox.douyin.utils.cookies import NonceSignRefererUtils
+from toolbox.douyin.utils.html_utils import DouyinHtmlUtils
 from toolbox.utils.exception import ExpectedError
 from toolbox.utils.utils import when_error, when_expected_error
 
@@ -47,7 +48,7 @@ class UserMeta(BaseModel):
         return self.model_dump()
 
 
-class UserInfoRestful(NonceSignRefererUtils):
+class UserInfoRestful(DouyinHtmlUtils, NonceSignRefererUtils):
     headers = {
         "User-Agent": (
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
@@ -74,29 +75,16 @@ class UserInfoRestful(NonceSignRefererUtils):
         "browser_online": "true",
     }
 
-    _ANTI_CRAWL_KEYWORDS: List[str] = [
-        "argus-csp-token",
-        "Please wait...",
-    ]
-
     def __init__(self) -> None:
         super().__init__()
 
-    @classmethod
-    def is_anti_crawl_page(cls, html: str) -> bool:
-        if not html:
-            return True
-        if "secUid" in html or "followerCount" in html or "follower_count" in html:
-            return False
-        return any(key in html for key in cls._ANTI_CRAWL_KEYWORDS)
-
     @staticmethod
-    def build_user_profile_url(sec_uid: str = "", author_user_id: str = "") -> str:
+    def build_user_profile_url(sec_uid: str = None, author_user_id: str = None) -> str:
         if sec_uid:
             return f"https://www.douyin.com/user/{sec_uid}"
         if author_user_id:
             return f"https://www.douyin.com/user/{author_user_id}"
-        return "https://www.douyin.com/"
+        raise AssertionError("sec_uid and author_user_id are both None")
 
     def _build_session(self) -> requests.Session:
         session = requests.Session()
@@ -194,8 +182,8 @@ class UserInfoRestful(NonceSignRefererUtils):
                 status_code=60500,
                 message=f"live user api failed; status_code: {status_code}, status_msg: {status_msg}",
             )
-        data = js.get("data")
-        if not isinstance(data, dict) or not data.get("id"):
+        data = js["data"]
+        if not isinstance(data, dict) or not data["id"]:
             raise ExpectedError(status_code=60500, message="live user api has no user data")
         return data
 
@@ -240,27 +228,28 @@ class UserInfo(UserInfoRestful):
     def build_user_meta_from_html_branch_1(self, user: Dict[str, Any], sec_uid: str = "") -> UserMeta:
         user_meta = UserMeta()
         user_meta.source = "build_user_meta_from_html_branch_1"
-        user_meta.sec_uid = str(user.get("secUid") or sec_uid or "")
-        user_meta.author_user_id = str(user.get("uid") or "")
-        user_meta.unique_id = str(user.get("uniqueId") or "")
-        user_meta.short_id = str(user.get("shortId") or "")
-        user_meta.nickname = str(user.get("nickname") or "")
-        user_meta.signature = str(user.get("desc") or user.get("signature") or "")
+        user_meta.sec_uid = str(user["secUid"] or sec_uid)
+        user_meta.author_user_id = str(user["uid"])
+        user_meta.unique_id = str(user["uniqueId"])
+        user_meta.short_id = str(user["shortId"])
+        user_meta.nickname = str(user["nickname"])
+        user_meta.signature = str(user["desc"])
 
-        user_meta.follower_count = user.get("followerCount", "")
-        user_meta.following_count = user.get("followingCount", "")
-        user_meta.aweme_count = user.get("awemeCount", "")
-        user_meta.total_favorited = user.get("totalFavorited", "")
-        user_meta.favoriting_count = user.get("favoritingCount", "")
+        user_meta.follower_count = user["followerCount"]
+        user_meta.following_count = user["followingCount"]
+        user_meta.aweme_count = user["awemeCount"]
+        user_meta.total_favorited = user["totalFavorited"]
+        user_meta.favoriting_count = user["favoritingCount"]
 
-        avatar_url = user.get("avatarUrl") or ""
-        if not avatar_url:
-            avatar = user.get("avatar_thumb") or user.get("avatarThumb") or {}
-            if isinstance(avatar, dict):
-                url_list = avatar.get("url_list") or avatar.get("urlList") or []
-                if url_list:
-                    avatar_url = url_list[0]
-        user_meta.avatar_url = str(avatar_url or "")
+        avatar_url = ""
+        if user["avatarUrl"]:
+            avatar_url = user["avatarUrl"]
+        else:
+            avatar = user["avatarThumb"]
+            url_list = avatar["urlList"]
+            if url_list:
+                avatar_url = url_list[0]
+        user_meta.avatar_url = str(avatar_url)
         user_meta.profile_url = self.build_user_profile_url(sec_uid=user_meta.sec_uid)
         return user_meta
 
@@ -268,32 +257,30 @@ class UserInfo(UserInfoRestful):
     def build_user_meta_from_api_branch_1(self, user: Dict[str, Any]) -> UserMeta:
         user_meta = UserMeta()
         user_meta.source = "build_user_meta_from_api_branch_1"
-        user_meta.sec_uid = str(user.get("sec_uid") or user.get("secUid") or "")
-        user_meta.author_user_id = str(user.get("uid") or "")
-        user_meta.unique_id = str(user.get("unique_id") or user.get("uniqueId") or "")
-        user_meta.short_id = str(user.get("short_id") or user.get("shortId") or "")
-        user_meta.nickname = str(user.get("nickname") or "")
-        user_meta.signature = str(user.get("signature") or "")
+        user_meta.sec_uid = str(user["sec_uid"])
+        user_meta.author_user_id = str(user["uid"])
+        user_meta.unique_id = str(user["unique_id"])
+        user_meta.short_id = str(user["short_id"])
+        user_meta.nickname = str(user["nickname"])
+        user_meta.signature = str(user["signature"])
 
-        user_meta.follower_count = user.get("follower_count", user.get("followerCount", ""))
-        user_meta.following_count = user.get("following_count", user.get("followingCount", ""))
-        user_meta.aweme_count = user.get("aweme_count", user.get("awemeCount", ""))
-        user_meta.total_favorited = user.get("total_favorited", user.get("totalFavorited", ""))
-        user_meta.favoriting_count = user.get("favoriting_count", user.get("favoritingCount", ""))
+        user_meta.follower_count = user["follower_count"]
+        user_meta.following_count = user["following_count"]
+        user_meta.aweme_count = user["aweme_count"]
+        user_meta.total_favorited = user["total_favorited"]
+        user_meta.favoriting_count = user["favoriting_count"]
 
         avatar_url = ""
-        avatar = user.get("avatar_thumb") or user.get("avatarThumb") or {}
-        if isinstance(avatar, dict):
-            url_list = avatar.get("url_list") or avatar.get("urlList") or []
+        avatar = user["avatar_thumb"]
+        url_list = avatar["url_list"]
+        if url_list:
+            avatar_url = url_list[0]
+        if not avatar_url:
+            avatar_larger = user["avatar_larger"]
+            url_list = avatar_larger["url_list"]
             if url_list:
                 avatar_url = url_list[0]
-        if not avatar_url:
-            avatar_larger = user.get("avatar_larger") or user.get("avatarLarger") or {}
-            if isinstance(avatar_larger, dict):
-                url_list = avatar_larger.get("url_list") or avatar_larger.get("urlList") or []
-                if url_list:
-                    avatar_url = url_list[0]
-        user_meta.avatar_url = str(avatar_url or "")
+        user_meta.avatar_url = str(avatar_url)
         user_meta.profile_url = self.build_user_profile_url(
             sec_uid=user_meta.sec_uid,
             author_user_id=user_meta.author_user_id,
@@ -307,33 +294,33 @@ class UserInfo(UserInfoRestful):
         referer: str,
     ) -> Optional[UserMeta]:
         js = self.get_profile_api_json(params=params, referer=referer)
-        user = js.get("user")
-        if isinstance(user, dict) and user.get("uid"):
+        user = js["user"]
+        if user["uid"]:
             return self.build_user_meta_from_api_branch_1(user)
         return None
 
     @when_expected_error(return_value=None)
     def _get_user_meta_from_live_api_by_sec_uid(self, sec_uid: str) -> Optional[UserMeta]:
         live_user = self.get_live_user_api_json(sec_uid=sec_uid)
-        author_user_id = str(live_user.get("id") or "")
+        author_user_id = str(live_user["id"])
         if author_user_id:
             user_meta = self._get_user_meta_from_profile_api(
                 params={"user_id": author_user_id},
                 referer=self.build_user_profile_url(author_user_id=author_user_id),
             )
             if user_meta is not None:
-                user_meta.sec_uid = str(live_user.get("sec_uid") or sec_uid)
+                user_meta.sec_uid = str(live_user["sec_uid"] or sec_uid)
                 return user_meta
         return self.build_user_meta_from_live_api_branch_1(live_user)
 
     @when_expected_error(return_value=None)
     def _get_user_meta_from_live_api(self, author_user_id: str) -> Optional[UserMeta]:
         live_user = self.get_live_user_api_json(author_user_id=author_user_id)
-        sec_uid = str(live_user.get("sec_uid") or "")
+        sec_uid = str(live_user["sec_uid"])
         if sec_uid:
             profile_url = self.build_user_profile_url(sec_uid=sec_uid)
             html = self.get_text_by_url_with_ac(profile_url)
-            if html and not self.is_anti_crawl_page(html):
+            if html and not self.is_anti_crawl_user_page(html):
                 user = self.get_user_by_html(html)
                 if user is not None:
                     user_meta = self.build_user_meta_from_html_branch_1(user, sec_uid=sec_uid)
@@ -349,8 +336,7 @@ class UserInfo(UserInfoRestful):
 
     @when_expected_error(return_value=None)
     def get_user_meta_by_sec_uid(self, sec_uid: str) -> Optional[Dict[str, Any]]:
-        sec_uid = str(sec_uid or "").strip()
-        if not sec_uid:
+        if sec_uid is None or len(sec_uid) == 0:
             raise ExpectedError(status_code=60500, message="sec_uid is empty")
 
         user_meta = None
@@ -358,7 +344,7 @@ class UserInfo(UserInfoRestful):
 
         if user_meta is None:
             html = self.get_text_by_url_with_ac(profile_url)
-            if html and not self.is_anti_crawl_page(html):
+            if html and not self.is_anti_crawl_user_page(html):
                 user = self.get_user_by_html(html)
                 if user is not None:
                     user_meta = self.build_user_meta_from_html_branch_1(user, sec_uid=sec_uid)
@@ -412,25 +398,20 @@ class UserInfo(UserInfoRestful):
     def build_user_meta_from_live_api_branch_1(self, user: Dict[str, Any]) -> UserMeta:
         user_meta = UserMeta()
         user_meta.source = "build_user_meta_from_live_api_branch_1"
-        user_meta.sec_uid = str(user.get("sec_uid") or "")
-        user_meta.author_user_id = str(user.get("id") or user.get("id_str") or "")
-        user_meta.unique_id = str(user.get("display_id") or "")
-        user_meta.short_id = str(user.get("short_id") or "")
-        user_meta.nickname = str(user.get("nickname") or "")
-        user_meta.signature = str(user.get("signature") or "")
+        user_meta.sec_uid = str(user["sec_uid"])
+        user_meta.author_user_id = str(user["id"])
+        user_meta.unique_id = str(user["display_id"])
+        user_meta.short_id = str(user["short_id"])
+        user_meta.nickname = str(user["nickname"])
+        user_meta.signature = str(user["signature"])
 
-        follow_info = user.get("follow_info") or {}
-        if isinstance(follow_info, dict):
-            user_meta.follower_count = follow_info.get("follower_count", "")
-            user_meta.following_count = follow_info.get("following_count", "")
+        follow_info = user["follow_info"]
+        user_meta.follower_count = follow_info["follower_count"]
+        user_meta.following_count = follow_info["following_count"]
 
-        avatar_url = ""
-        avatar = user.get("avatar_thumb") or {}
-        if isinstance(avatar, dict):
-            url_list = avatar.get("url_list") or []
-            if url_list:
-                avatar_url = url_list[0]
-        user_meta.avatar_url = str(avatar_url or "")
+        avatar = user["avatar_thumb"]
+        avatar_url = avatar["url_list"][0]
+        user_meta.avatar_url = str(avatar_url)
         user_meta.profile_url = self.build_user_profile_url(
             sec_uid=user_meta.sec_uid,
             author_user_id=user_meta.author_user_id,

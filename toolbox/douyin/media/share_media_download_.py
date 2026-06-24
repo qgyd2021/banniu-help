@@ -1,16 +1,20 @@
 #!/usr/bin/python3
 # -*- coding: utf-8 -*-
+import base64
+import hashlib
 import logging
 import re
 import json
+from urllib.parse import urlparse
 from pydantic import BaseModel, ConfigDict, Field
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, Iterator, List, Optional, Tuple, Union
 
 import cacheout
 import requests
 
 from toolbox.douyin.homepage.user_info import UserInfo, UserMeta
 from toolbox.douyin.utils.cookies import NonceSignRefererUtils
+from toolbox.douyin.utils.html_utils import DouyinHtmlUtils
 from toolbox.utils.utils import when_error, when_expected_error, ExpectedError
 
 logger = logging.getLogger("toolbox")
@@ -68,8 +72,8 @@ class PostMeta(BaseModel):
         return self.model_dump()
 
 
-class ShareMediaDownloadRestful(NonceSignRefererUtils):
-    headers = {
+class ShareMediaDownloadRestfulWindows(NonceSignRefererUtils):
+    windows_headers = {
         "User-Agent": (
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
             "(KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
@@ -84,47 +88,16 @@ class ShareMediaDownloadRestful(NonceSignRefererUtils):
 
     def _build_session(self) -> requests.Session:
         session = requests.Session()
-        _ = session.request(method="GET", url="https://www.douyin.com/", headers=self.headers)
+        _ = session.request(method="GET", url="https://www.douyin.com/", headers=self.windows_headers)
         session.cookies.update(requests.utils.cookiejar_from_dict(self.ac_nonce_signature))
         return session
-
-    @classmethod
-    def _has_embedded_aweme_data(cls, html: str) -> bool:
-        if not html:
-            return False
-        if "_ROUTER_DATA" in html:
-            return True
-        if "awemeId" in html and "authorInfo" in html:
-            return True
-        if "videoInfoRes" in html:
-            return True
-        return False
-
-    @classmethod
-    def is_anti_crawl_page(cls, html: str) -> bool:
-        if not html:
-            return True
-        if cls._has_embedded_aweme_data(html):
-            return False
-        if "secUid" in html or "followerCount" in html or "follower_count" in html:
-            return False
-        if "window.location.reload()" in html and "byted_acrawler" in html:
-            return True
-        if any(key in html for key in [
-            "argus-csp-token",
-            "Please wait...",
-        ]):
-            return True
-        if len(html) < 20000 and "__pace_f" not in html and "_ROUTER_DATA" not in html:
-            return True
-        return False
 
     def get_final_url_by_share_url(self, share_url: str) -> str:
         session = self._build_session()
         response = session.get(
             share_url,
             headers={
-                **self.headers,
+                **self.windows_headers,
                 "Referer": "https://www.douyin.com/",
             },
             allow_redirects=True,
@@ -139,7 +112,7 @@ class ShareMediaDownloadRestful(NonceSignRefererUtils):
         response = session.get(
             url,
             headers={
-                **self.headers,
+                **self.windows_headers,
                 "Referer": url,
             },
             allow_redirects=True,
@@ -151,31 +124,12 @@ class ShareMediaDownloadRestful(NonceSignRefererUtils):
             )
         return response.text
 
-    def iter_page_html_candidates(self, url: str) -> List[str]:
-        candidates: List[str] = []
-        seen_lengths: set[int] = set()
-
-        def add_candidate(html: Optional[str]) -> None:
-            if not html:
-                return
-            html_len = len(html)
-            if html_len in seen_lengths:
-                return
-            seen_lengths.add(html_len)
-            candidates.append(html)
-
-        add_candidate(self.fetch_text_by_url_with_ac(url))
-        add_candidate(self.fetch_text_by_url_with_ac(url, refresh_ac=True))
-        add_candidate(self.get_text_by_url(url))
-        add_candidate(self.fetch_text_by_url_with_ac(url, refresh_ac=True))
-        return candidates
-
     def get_aweme_detail_api_json(self, aweme_id: str, referer: str) -> Dict[str, Any]:
         session = self._build_session()
         response = session.get(
             url="https://www.douyin.com/aweme/v1/web/aweme/detail/",
             headers={
-                **self.headers,
+                **self.windows_headers,
                 "Referer": referer,
             },
             params={
@@ -206,12 +160,133 @@ class ShareMediaDownloadRestful(NonceSignRefererUtils):
 
     @cacheout.memoize(ttl=10)
     def get_text_by_url(self, url: str) -> Optional[str]:
-        response = requests.get(url, headers=self.headers,
-                                # allow_redirects=False,
-                                timeout=30)
+        response = requests.get(
+            url,
+            headers=self.windows_headers,
+            timeout=30,
+        )
         if response.status_code != 200:
-            raise AssertionError(f"request failed; status_code: {response.status_code}, text: {response.text}, url: {url}")
+            raise AssertionError(
+                f"request failed; status_code: {response.status_code}, text: {response.text}, url: {url}"
+            )
         return response.text
+
+
+class ShareMediaDownloadRestfulIPhone(object):
+    iphone_headers = {
+        "User-Agent": (
+            "Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) "
+            "AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Mobile/15E148 Safari/604.1"
+        ),
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
+        "Referer": "https://www.douyin.com/",
+    }
+
+    @staticmethod
+    def _b64decode_padded(data: str) -> bytes:
+        return base64.b64decode(data + "=" * (-len(data) % 4))
+
+    @classmethod
+    def _build_waf_challenge_cookie(cls, html: str) -> Optional[str]:
+        if "Please wait..." not in html or 'cs="' not in html:
+            return None
+        match = re.search(r'cs="([^"]+)"', html)
+        if match is None:
+            return None
+
+        challenge = json.loads(cls._b64decode_padded(match.group(1)))
+        prefix = cls._b64decode_padded(challenge["v"]["a"])
+        expect_hex = cls._b64decode_padded(challenge["v"]["c"]).hex()
+        for i in range(1_000_001):
+            if hashlib.sha256(prefix + str(i).encode()).hexdigest() == expect_hex:
+                challenge["d"] = base64.b64encode(str(i).encode()).decode()
+                return base64.b64encode(
+                    json.dumps(challenge, separators=(",", ":")).encode()
+                ).decode()
+        return None
+
+    def fetch_text_by_url(self, url: str) -> str:
+        headers = self.iphone_headers
+        session = requests.Session()
+        response = session.get(
+            url,
+            headers=headers,
+            allow_redirects=True,
+            timeout=30,
+        )
+        if response.status_code != 200:
+            raise AssertionError(
+                f"request failed; status_code: {response.status_code}, text: {response.text}, url: {url}"
+            )
+
+        waf_cookie = self._build_waf_challenge_cookie(response.text)
+        if waf_cookie is not None:
+            hostname = urlparse(url).hostname or ""
+            session.cookies.set("_wafchallengeid", waf_cookie, domain=hostname)
+            response = session.get(
+                url,
+                headers=headers,
+                allow_redirects=True,
+                timeout=30,
+            )
+            if response.status_code != 200:
+                raise AssertionError(
+                    f"request failed; status_code: {response.status_code}, text: {response.text}, url: {url}"
+                )
+
+        return response.text
+
+
+class ShareMediaDownloadRestful(DouyinHtmlUtils, ShareMediaDownloadRestfulWindows, ShareMediaDownloadRestfulIPhone):
+    is_anti_crawl_page = DouyinHtmlUtils.is_anti_crawl_aweme_page
+
+    def build_page_url_candidates(self, share_url: str, final_url: str, aweme_id: str) -> List[str]:
+        if not share_url:
+            raise AssertionError("share_url is empty")
+        if not final_url:
+            raise AssertionError("final_url is empty")
+        if not aweme_id:
+            raise AssertionError("aweme_id is empty")
+
+        page_url_set: set[str] = {
+            final_url,
+            share_url,
+            f"https://www.iesdouyin.com/share/video/{aweme_id}/",
+            f"https://www.douyin.com/video/{aweme_id}",
+            f"https://www.douyin.com/note/{aweme_id}",
+            f"https://www.douyin.com/user/self?modal_id={aweme_id}",
+        }
+        return list(page_url_set)
+
+    def iter_page_html_candidates(self, share_url: str, final_url: str, aweme_id: str) -> Iterator[Tuple[str, str]]:
+        seen: set[Tuple[int, str]] = set()
+
+        for page_url in self.build_page_url_candidates(share_url, final_url, aweme_id):
+            html = self.fetch_text_by_url(page_url)
+            key = (len(html), page_url)
+            if key not in seen:
+                seen.add(key)
+                yield html, page_url
+
+            html = self.fetch_text_by_url_with_ac(page_url)
+            key = (len(html), page_url)
+            if key not in seen:
+                seen.add(key)
+                yield html, page_url
+
+            html = self.fetch_text_by_url_with_ac(page_url, refresh_ac=True)
+            key = (len(html), page_url)
+            if key not in seen:
+                seen.add(key)
+                yield html, page_url
+
+            html = self.get_text_by_url(page_url)
+            if html:
+                key = (len(html), page_url)
+                if key not in seen:
+                    seen.add(key)
+                    yield html, page_url
 
 
 class ShareMediaDownload(ShareMediaDownloadRestful):
@@ -334,41 +409,62 @@ class ShareMediaDownload(ShareMediaDownloadRestful):
     @when_expected_error(return_value=None)
     def get_post_meta_by_share_url(self, share_url: str) -> dict:
         final_url = self.get_final_url_by_share_url(share_url)
+        _, aweme_id = self.get_aweme_type_and_id_by_final_url(final_url)
 
         post_meta = None
-        for html in self.iter_page_html_candidates(final_url):
+        resolved_final_url = final_url
+        for html, page_url in self.iter_page_html_candidates(share_url, final_url, aweme_id):
             if self.is_anti_crawl_page(html):
                 continue
-            aweme = self.get_aweme_by_html(html)
-            if aweme is not None:
-                post_meta = self.build_post_meta_from_aweme_branch_1(aweme)
-                if post_meta is not None:
-                    break
-            router_data = self.get_router_data_by_html(html)
-            if router_data is not None:
-                post_meta = self.build_post_meta_from_router_data_branch_1(router_data)
-                if post_meta is not None:
-                    break
+            post_meta = self.get_post_meta_from_html(html)
+            if post_meta is not None:
+                resolved_final_url = page_url
+                break
 
         if post_meta is None:
-            _, aweme_id = self.get_aweme_type_and_id_by_final_url(final_url)
-            js = self.get_aweme_detail_api_json(aweme_id=aweme_id, referer=final_url)
-            if "aweme_detail" in js:
-                aweme = js["aweme_detail"]
-            else:
-                aweme = js["aweme"]
-            if isinstance(aweme, dict):
-                post_meta = self.build_post_meta_from_aweme_detail_api_branch_1(aweme)
+            for referer in self.build_page_url_candidates(share_url, final_url, aweme_id):
+                post_meta = self.get_post_meta_from_aweme_detail_api(aweme_id, referer)
+                if post_meta is not None:
+                    resolved_final_url = referer
+                    break
 
         if post_meta is None:
             raise ExpectedError(status_code=60500, message=f"未成功解析到信息；share_url: {share_url}")
 
         post_meta.share_url = share_url
-        post_meta.final_url = final_url
+        post_meta.final_url = resolved_final_url
 
         user_meta = self.get_user_meta_by_post_meta(post_meta)
         post_meta = self.apply_user_meta_to_post_meta(post_meta, user_meta)
         return post_meta.to_dict()
+
+    def get_post_meta_from_html(self, html: str) -> Optional[PostMeta]:
+        aweme = self.get_aweme_by_html(html)
+        if aweme is not None:
+            post_meta = self.build_post_meta_from_aweme_branch_1(aweme)
+            if post_meta is not None:
+                return post_meta
+
+        router_data = self.get_router_data_by_html(html)
+        if router_data is not None:
+            post_meta = self.build_post_meta_from_router_data_branch_1(router_data)
+            if post_meta is not None:
+                return post_meta
+            post_meta = self.build_post_meta_from_router_data_branch_2(router_data)
+            if post_meta is not None:
+                return post_meta
+        return None
+
+    @when_error(return_value=None)
+    def get_post_meta_from_aweme_detail_api(self, aweme_id: str, referer: str) -> Optional[PostMeta]:
+        js = self.get_aweme_detail_api_json(aweme_id=aweme_id, referer=referer)
+        if "aweme_detail" in js:
+            aweme = js["aweme_detail"]
+        else:
+            aweme = js["aweme"]
+        if not isinstance(aweme, dict):
+            return None
+        return self.build_post_meta_from_aweme_detail_api_branch_1(aweme)
 
     @when_error(return_value=None)
     def build_post_meta_from_router_data_branch_1(self, router_data: dict) -> PostMeta:
@@ -459,6 +555,77 @@ class ShareMediaDownload(ShareMediaDownloadRestful):
                 VideoMeta(cover_url=cover_url, video_url=video_url),
             ]
             post_meta.video_urls = video_urls
+
+        return post_meta
+
+    @when_error(return_value=None)
+    def build_post_meta_from_router_data_branch_2(self, router_data: dict) -> PostMeta:
+        """
+        iesdouyin 移动端 _ROUTER_DATA；author 无 uid，仅有 sec_uid。
+        https://v.douyin.com/bex4cW-lzxw/
+        """
+        loader_data: dict = router_data.get("loaderData")
+        if loader_data is None:
+            return None
+
+        post_meta = PostMeta()
+        post_meta.post_type = "build_post_meta_from_router_data_branch_2"
+
+        item = None
+        for _, v in loader_data.items():
+            if not isinstance(v, dict):
+                continue
+            video_info_res: dict = v.get("videoInfoRes")
+            if video_info_res is None:
+                continue
+            item_list = video_info_res["item_list"]
+            if len(item_list) == 0:
+                filter_list = video_info_res["filter_list"]
+                if len(filter_list) != 0:
+                    f = filter_list[0]
+                    msg = f.get("detail_msg") or f.get("filter_reason")
+                    post_meta.post_id = f["aweme_id"]
+                    post_meta.title = msg
+                    post_meta.desc = msg
+                    return post_meta
+            item = video_info_res["item_list"][0]
+
+        aweme_type = item["aweme_type"]
+        desc = item["desc"]
+        tags = [e["hashtag_name"] for e in item["text_extra"]]
+        tags = [tag for tag in tags if len(str(tag).strip()) > 0]
+        tags = list(sorted(tags, key=len, reverse=True))
+        for tag in tags:
+            desc = desc.lower().replace(f"#{str(tag).lower()}", "").strip()
+
+        post_meta.post_id = item["aweme_id"]
+        post_meta.title = ""
+        post_meta.desc = desc
+        post_meta.tags = tags
+
+        author = item["author"]
+        post_meta.sec_user_id = str(author["sec_uid"])
+        post_meta.short_id = str(author["short_id"])
+        post_meta.nickname = str(author["nickname"])
+
+        post_meta.liked_count = item["statistics"]["digg_count"]
+        post_meta.collected_count = item["statistics"]["collect_count"]
+        post_meta.comment_count = item["statistics"]["comment_count"]
+        post_meta.share_count = item["statistics"]["share_count"]
+
+        if aweme_type not in (4,):
+            image_urls = list()
+            for image in item["images"]:
+                image_urls.append(image["url_list"][0])
+            post_meta.image_urls = image_urls
+
+        if aweme_type not in (2,):
+            video_url = item["video"]["play_addr"]["url_list"][0]
+            video_url = video_url.replace("playwm", "play")
+            cover_url = item["video"]["cover"]["url_list"][0]
+            post_meta.video_urls = [
+                VideoMeta(cover_url=cover_url, video_url=video_url),
+            ]
 
         return post_meta
 
@@ -574,14 +741,13 @@ def main() -> None:
 
     share_text = """
 
-        9.23 e@b.Ag :0pm YZM:/ 02/01 新键盘# 迈从# 迈从Ace68v2  https://v.douyin.com/FfKNyQ5-Ymc/ 复制此链接，打开Dou音搜索，直接观看视频！
+1.00 # 鼠标推荐 # 电竞鼠标升级 # 新的鼠标 https://v.douyin.com/bex4cW-lzxw/ 复制此链接，打开抖音搜索，直接观看视频！ n@D.Hi Yzt:/ :1pm 07/08
 
 
 """
     post_meta = client.get_post_meta_by_share_text(share_text)
     print("post_meta:")
     print(json.dumps(post_meta, ensure_ascii=False, indent=2))
-    return
 
 
 if __name__ == "__main__":
