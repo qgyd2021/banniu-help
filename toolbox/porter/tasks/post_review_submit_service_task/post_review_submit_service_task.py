@@ -50,7 +50,8 @@ from project_settings import environment, project_path
 
 logger = logging.getLogger("toolbox")
 
-TASK_JSON_CACHE: cacheout.Cache = cacheout.Cache(maxsize=1000000, ttl=24*3600)
+# 按筛选条件缓存 next-rows 文件遍历游标（翻页时跳过已扫过的前缀，不区分 client）
+NEXT_ROWS_CURSOR_CACHE: cacheout.Cache = cacheout.Cache(maxsize=256, ttl=3600)
 
 
 class UpdateBanniuRequest(BaseModel):
@@ -182,7 +183,7 @@ class PostReviewSubmitServiceTask(BaseTask, TaskJsonUtils):
         return server_file
 
     @staticmethod
-    @TASK_JSON_CACHE.memoize(ttl=24 * 3600)
+    @cacheout.memoize(ttl=24 * 3600)
     def read_task_json(source_file: str) -> Optional[Dict[str, Any]]:
         try:
             with open(source_file, "r", encoding="utf-8") as f:
@@ -298,20 +299,28 @@ class PostReviewSubmitServiceTask(BaseTask, TaskJsonUtils):
                 continue
         return None
 
+    @staticmethod
+    @cacheout.memoize(ttl=3600)
+    def _list_task_json_files(source_dir: str) -> tuple:
+        root = Path(source_dir)
+        if not root.exists():
+            return tuple()
+        return tuple(sorted(p.as_posix() for p in root.rglob("**/*.json") if p.is_file()))
+
+    @cacheout.memoize(ttl=24 * 3600)
     def _iter_task_indices(self) -> List[Dict[str, Any]]:
         """扫描所有 source_dir 下的 task json，按 task_id 去重后返回轻量索引。
 
-        仅用于 ``gallery_page`` 计算筛选下拉项。
-        ``api_next_rows`` 走的是不依赖此索引的流式扫描路径，无需任何缓存。
+        结果缓存 24 小时，供 ``gallery_page`` 筛选项与 count 使用。
+        ``api_next_rows`` 按筛选条件缓存文件遍历游标，翻页时跳过已扫过的前缀。
 
         同一个 task_id 在多个 source_dir（流水线不同 step）中可能多次出现，
         这里按 ``self.source_dirs`` 的顺序"后者覆盖前者"，保留更靠后的副本。
         """
         idx_map: Dict[str, Dict[str, Any]] = {}
         for source_dir in self.source_dirs:
-            if not source_dir.exists():
-                continue
-            for fp in sorted(source_dir.rglob("**/*.json")):
+            for fp_str in self._list_task_json_files(source_dir.as_posix()):
+                fp = Path(fp_str)
                 payload = self.read_task_json(fp.as_posix())
                 if not payload:
                     continue
@@ -516,6 +525,21 @@ class PostReviewSubmitServiceTask(BaseTask, TaskJsonUtils):
             if q not in search_blob:
                 return False
         return True
+
+    def _next_rows_filter_signature(self, req: NextRowsRequest) -> str:
+        """仅含筛选与扫描路径；不含 client_id / exclude / limit。"""
+        payload = {
+            "source_dirs": [p.as_posix() for p in self.source_dirs],
+            "keyword": (req.keyword or "").strip(),
+            "product_model": (req.product_model or "").strip(),
+            "review_status": (req.review_status or "").strip(),
+            "task_status": (req.task_status or "").strip(),
+            "final_approved": (req.final_approved or "").strip(),
+            "reviewer": (req.reviewer or "").strip(),
+            "created_start": (req.created_start or "").strip(),
+            "created_end": (req.created_end or "").strip(),
+        }
+        return json.dumps(payload, ensure_ascii=False, sort_keys=True)
 
     @staticmethod
     def _uniq_index(entries: List[Dict[str, Any]], field: str) -> List[str]:
@@ -807,7 +831,8 @@ class PostReviewSubmitServiceTask(BaseTask, TaskJsonUtils):
         task_formatted_dict.update(fields)
         js["task_formatted"] = task_formatted_dict
         src.write_text(json.dumps(js, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-        TASK_JSON_CACHE.delete(src.as_posix())
+        cache_key = self.read_task_json.cache_key(src.as_posix())
+        self.read_task_json.cache.delete(cache_key)
 
         result = {
             "task_id": task_id,
@@ -841,17 +866,23 @@ class PostReviewSubmitServiceTask(BaseTask, TaskJsonUtils):
 
         exclude = set(payload.exclude_task_ids or [])
         limit = max(1, min(int(payload.limit or 2), 20))
+        filter_signature = self._next_rows_filter_signature(payload)
+        file_skip = int(NEXT_ROWS_CURSOR_CACHE.get(filter_signature) or 0)
 
         row_template = self.templates.get_template("_row.html")
         rows_out: List[Dict[str, Any]] = []
         seen_tids: set = set()
         matched_scanned = 0
         stopped_early = False
+        file_index = 0
 
         for source_dir in self.source_dirs:
-            if not source_dir.exists():
-                continue
-            for fp in sorted(source_dir.rglob("**/*.json")):
+            for fp_str in self._list_task_json_files(source_dir.as_posix()):
+                if file_index < file_skip:
+                    file_index += 1
+                    continue
+                file_index += 1
+                fp = Path(fp_str)
                 task_data = self.read_task_json(fp.as_posix())
                 if not task_data:
                     continue
@@ -889,6 +920,8 @@ class PostReviewSubmitServiceTask(BaseTask, TaskJsonUtils):
                     break
             if stopped_early:
                 break
+
+        NEXT_ROWS_CURSOR_CACHE.set(filter_signature, file_index)
 
         reached_end = not stopped_early
         result = {
